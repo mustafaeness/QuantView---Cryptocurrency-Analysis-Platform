@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kripto Para Haberleri</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+        h1 {
+            margin: 0;
+            color: #e0b422;
+        }
+        .back-button {
+            background-color: #e0b422;
+            color: #121212;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .back-button:hover {
+            background-color: #ffd700;
+        }
+        .news-categories {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        .category {
+            background-color: #333;
+            color: #f0f0f0;
+            border: none;
+            padding: 8px 15px;
+            margin-right: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .category.active {
+            background-color: #e0b422;
+            color: #121212;
+        }
+        .category:hover {
+            background-color: #444;
+        }
+        .category.active:hover {
+            background-color: #ffd700;
+        }
+        .news-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .news-card {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.3s;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .news-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .news-header {
+            background-color: #2a2a2a;
+            padding: 10px 15px;
+            font-size: 0.8rem;
+            color: #e0b422;
+            display: flex;
+            justify-content: space-between;
+        }
+        .news-content {
+            padding: 15px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .news-title {
+            font-size: 1.1rem;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #e0b422;
+        }
+        .news-description {
+            color: #bbb;
+            margin-bottom: 15px;
+            flex-grow: 1;
+        }
+        .news-link {
+            display: inline-block;
+            background-color: #333;
+            color: #f0f0f0;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-top: auto;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+        .news-link:hover {
+            background-color: #e0b422;
+            color: #121212;
+        }
+        .resources {
+            margin-top: 40px;
+            padding: 20px;
+            background-color: #1e1e1e;
+            border-radius: 8px;
+        }
+        .resource-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .resource-item {
+            background-color: #333;
+            color: #f0f0f0;
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .resource-item:hover {
+            background-color: #e0b422;
+            color: #121212;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2rem;
+            color: #e0b422;
+        }
+        .error {
+            background-color: rgba(255, 0, 0, 0.1);
+            color: #ff6b6b;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Kripto Para Haberleri</h1>
+            <button class="back-button" onclick="window.location.href='index.html'">Ana Sayfaya Dön</button>
+        </header>
+
+        <div class="news-categories">
+            <button class="category active" data-category="all" id="all">Tüm Haberler</button>
+            <button class="category" data-category="bitcoin" id="bitcoin">Bitcoin</button>
+            <button class="category" data-category="ethereum" id="ethereum">Ethereum</button>
+            <button class="category" data-category="bnb" id="bnb">BNB</button>
+            <button class="category" data-category="market" id="market">Piyasa</button>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="loading" class="loading">Haberler yükleniyor...</div>
+        <div id="newsContainer" class="news-container"></div>
+
+        <div class="resources">
+            <h2>Güvenilir Kaynaklar</h2>
+            <div class="resource-list">
+                <a href="https://cointelegraph.com/" target="_blank" class="resource-item">CoinTelegraph</a>
+                <a href="https://www.coindesk.com/" target="_blank" class="resource-item">CoinDesk</a>
+                <a href="https://decrypt.co/" target="_blank" class="resource-item">Decrypt</a>
+                <a href="https://www.theblockcrypto.com/" target="_blank" class="resource-item">The Block</a>
+                <a href="https://finance.yahoo.com/crypto/" target="_blank" class="resource-item">Yahoo Finance</a>
+                <a href="https://www.bloomberg.com/crypto" target="_blank" class="resource-item">Bloomberg Crypto</a>
+                <a href="https://www.cnbc.com/crypto/" target="_blank" class="resource-item">CNBC Crypto</a>
+                <a href="https://www.ft.com/cryptocurrencies" target="_blank" class="resource-item">Financial Times</a>
+                <a href="https://www.wsj.com/news/types/cryptocurrencies" target="_blank" class="resource-item">Wall Street Journal</a>
+                <a href="https://www.reuters.com/subjects/cryptocurrency" target="_blank" class="resource-item">Reuters</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="crypto_news_alt.js"></script>
+</body>
+</html> 
