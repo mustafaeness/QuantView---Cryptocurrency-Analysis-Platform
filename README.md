@@ -41,18 +41,18 @@ cd chartview
 
 Python 3.x için:
 ```bash
-python -m http.server 8000
+python -m http.server 34300
 ```
 
 Eğer Python 2.x kullanıyorsanız:
 ```bash
-python -m SimpleHTTPServer 8000
+python -m SimpleHTTPServer 34300
 ```
 
 4. Web tarayıcınızı açın ve aşağıdaki adresi ziyaret edin:
 
 ```
-http://localhost:8000
+http://localhost:34300
 ```
 
 ## Kullanım
