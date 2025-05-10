@@ -1541,8 +1541,62 @@ class ChartView {
         
         this.ctx.save();
         
-        // Çizgi stili
-        this.ctx.strokeStyle = '#3b82f6'; // Mavi
+        if (drawing.type === 'sellSignal' || drawing.type === 'buySignal') {
+            // Sinyal çizimi
+            const x = this.dataToPixelX(drawing.time);
+            let y = this.dataToPixelY(drawing.price);
+            
+            // Mum boyutunu hesapla
+            const visibleData = this.data.filter(d => 
+                d.x >= this.visibleRange.start && d.x <= this.visibleRange.end
+            );
+            const barWidth = Math.min(
+                this.canvas.width / visibleData.length * 0.8, 
+                25
+            );
+            const finalBarWidth = Math.max(barWidth, 3);
+            
+            // Ok boyutları - mum genişliğiyle aynı
+            const arrowWidth = finalBarWidth;
+            const arrowHeight = finalBarWidth;
+            const arrowOffset = 18; // Okun mumdan ayrılması için piksel miktarı
+            
+            // Okun mumdan ayrılması için y koordinatını ayarla
+            if (drawing.type === 'sellSignal') {
+                y -= arrowOffset; // high'ın üstüne taşır
+            } else {
+                y += arrowOffset; // low'un altına taşır
+            }
+            
+            this.ctx.fillStyle = drawing.color;
+            this.ctx.beginPath();
+            
+            if (drawing.type === 'sellSignal') {
+                // Aşağı ok (SAT sinyali) - ▼
+                this.ctx.moveTo(x, y + arrowHeight); // Okun ucu (altta)
+                this.ctx.lineTo(x - arrowWidth/2, y); // Sol üst
+                this.ctx.lineTo(x + arrowWidth/2, y); // Sağ üst
+            } else {
+                // Yukarı ok (AL sinyali) - ▲
+                this.ctx.moveTo(x, y - arrowHeight); // Okun ucu (üstte)
+                this.ctx.lineTo(x - arrowWidth/2, y); // Sol alt
+                this.ctx.lineTo(x + arrowWidth/2, y); // Sağ alt
+            }
+            
+            this.ctx.closePath();
+            this.ctx.fill();
+            
+            // Ok kenarlarını çiz - daha belirgin görünüm için
+            this.ctx.strokeStyle = drawing.color;
+            this.ctx.lineWidth = 1.5;
+            this.ctx.stroke();
+            
+            this.ctx.restore();
+            return;
+        }
+        
+        // Diğer çizimler için mevcut kod
+        this.ctx.strokeStyle = '#3b82f6';
         this.ctx.lineWidth = 1.5;
         
         const startX = this.dataToPixelX(drawing.startTime);
@@ -1552,7 +1606,6 @@ class ChartView {
         
         switch (drawing.type) {
             case 'line':
-                // Çizgi çiz
                 this.ctx.beginPath();
                 this.ctx.moveTo(startX, startY);
                 this.ctx.lineTo(endX, endY);
@@ -1560,15 +1613,14 @@ class ChartView {
                 break;
                 
             case 'rectangle':
-                // Dikdörtgen çiz
                 this.ctx.beginPath();
+                this.ctx.strokeStyle = drawing.color || '#3b82f6';
                 this.ctx.strokeRect(
                     Math.min(startX, endX),
                     Math.min(startY, endY),
                     Math.abs(endX - startX),
                     Math.abs(endY - startY)
                 );
-                // Yarı saydam dolgu
                 this.ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
                 this.ctx.fillRect(
                     Math.min(startX, endX),
@@ -1702,8 +1754,35 @@ class TechnicalAnalysis {
         this.activeRectangles = [];
         this.isRunning = false;
         this.updateInterval = null;
+        this.signalsActive = false; // Sinyal gösterimi açık mı?
         
+        // Generate Signals butonunu oluştur
+        this.generateSignalsButton = document.createElement('button');
+        this.generateSignalsButton.id = 'generateSignals';
+        this.generateSignalsButton.textContent = 'Generate Signals';
+        this.generateSignalsButton.style.display = 'none';
+        this.generateSignalsButton.style.backgroundColor = '#2196F3';
+        this.generateSignalsButton.style.color = 'white';
+        this.generateSignalsButton.style.padding = '8px 16px';
+        this.generateSignalsButton.style.border = 'none';
+        this.generateSignalsButton.style.borderRadius = '4px';
+        this.generateSignalsButton.style.cursor = 'pointer';
+        this.generateSignalsButton.style.marginLeft = '10px';
+        
+        // Butonları yan yana yerleştir
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.display = 'flex';
+        buttonContainer.style.alignItems = 'center';
+        buttonContainer.style.marginBottom = '10px';
+        
+        // Orijinal butonu container'a taşı
+        this.runButton.parentNode.insertBefore(buttonContainer, this.runButton);
+        buttonContainer.appendChild(this.runButton);
+        buttonContainer.appendChild(this.generateSignalsButton);
+        
+        // Event listener'ları ekle
         this.runButton.addEventListener('click', () => this.toggleAnalysis());
+        this.generateSignalsButton.addEventListener('click', () => this.toggleSignals());
     }
 
     toggleAnalysis() {
@@ -1718,13 +1797,13 @@ class TechnicalAnalysis {
         this.isRunning = false;
         this.runButton.textContent = 'SDA – Squeeze Detection Algorithm';
         this.runButton.style.backgroundColor = '#4CAF50';
+        this.generateSignalsButton.style.display = 'none'; // Sinyal butonunu gizle
         this.activeRectangles = [];
         this.chartView.drawings = [];
         if (this.updateInterval) {
             clearInterval(this.updateInterval);
             this.updateInterval = null;
         }
-        // this.showResults('Algoritma durduruldu.'); // DURDURULDUĞUNDA BİLGİ GÖSTERİLMESİN
     }
 
     runAnalysis() {
@@ -1736,8 +1815,9 @@ class TechnicalAnalysis {
         this.isRunning = true;
         this.runButton.textContent = 'SDA Durdur';
         this.runButton.style.backgroundColor = '#f44336';
+        this.generateSignalsButton.style.display = 'inline-block'; // Sinyal butonunu göster
 
-        // Konsolidasyon kutularını bul
+        // 1. Konsolidasyon kutularını bul
         const candles = this.chartView.data;
         const currentPrice = candles[candles.length - 1].close;
         const minWindow = 20;
@@ -1769,18 +1849,40 @@ class TechnicalAnalysis {
                     endTime: window[window.length - 1].x,
                     touchCount: inRange,
                     violationCount: 0,
-                    status: 'active' // yeni eklendi
+                    status: 'active'
                 });
             }
         }
 
-        // Çakışan kutuları temizle (en uzun ve en çok temaslı olanı bırak)
+        // 2. Çakışan kutuları temizle
         boxes = this.cleanOverlappingBoxes(boxes);
         this.activeRectangles = boxes;
         this.completedRectangles = [];
+
+        // 3. Sadece kutuları çiz
         this.drawRectangles([...this.activeRectangles, ...this.completedRectangles]);
-        // this.showResults(this.formatResults(this.activeRectangles)); // KUTU BİLGİSİ GÖSTERİLMESİN
+
+        // 4. Canlı takibi başlat
         this.startLiveTracking();
+    }
+
+    toggleSignals() {
+        if (!this.isRunning) {
+            this.showResults('Önce SDA algoritmasını çalıştırın.');
+            return;
+        }
+        this.signalsActive = !this.signalsActive;
+        if (this.signalsActive) {
+            // Sinyalleri çiz
+            this.drawSignals([...this.activeRectangles, ...this.completedRectangles]);
+            this.generateSignalsButton.style.backgroundColor = '#4CAF50';
+            this.generateSignalsButton.textContent = 'Stop Generating Signals';
+        } else {
+            // Sinyalleri kaldır (sadece kutuları çiz)
+            this.drawRectangles([...this.activeRectangles, ...this.completedRectangles]);
+            this.generateSignalsButton.style.backgroundColor = '#2196F3';
+            this.generateSignalsButton.textContent = 'Generate Signals';
+        }
     }
 
     cleanOverlappingBoxes(boxes) {
@@ -1814,6 +1916,7 @@ class TechnicalAnalysis {
             const candles = this.chartView.data;
             if (!candles || candles.length === 0) return;
             const latestCandle = candles[candles.length - 1];
+            
             // Aktif kutuları güncelle
             const updated = [];
             for (const rect of this.activeRectangles) {
@@ -1832,14 +1935,16 @@ class TechnicalAnalysis {
                 }
                 updated.push({ ...rect, status, violationCount });
             }
+            
             // Aktif ve tamamlanmış kutuları ayır
             this.activeRectangles = updated.filter(r => r.status === 'active');
             this.completedRectangles = [
                 ...(this.completedRectangles || []),
                 ...updated.filter(r => r.status === 'completed' && !this.completedRectangles?.some(c => c.startTime === r.startTime && c.endTime === r.endTime))
             ];
+            
+            // Sadece kutuları çiz
             this.drawRectangles([...this.activeRectangles, ...this.completedRectangles]);
-            // this.showResults(this.formatResults(this.activeRectangles)); // KUTU BİLGİSİ GÖSTERİLMESİN
         }, 1000);
     }
 
@@ -1859,6 +1964,46 @@ class TechnicalAnalysis {
                 color: color
             };
             this.chartView.drawings.push(drawing);
+        });
+        // Sinyaller aktifse, sinyalleri de ekle
+        if (this.signalsActive) {
+            this.drawSignals(rectangles);
+        }
+    }
+
+    drawSignals(rectangles) {
+        rectangles.forEach(rect => {
+            const candles = this.chartView.data;
+            const upperTolerance = rect.upper * 0.003; // %0.3 tolerans
+            const lowerTolerance = rect.lower * 0.003; // %0.3 tolerans
+
+            // Kutu zaman aralığındaki tüm mumları tara
+            for (let i = 0; i < candles.length; i++) {
+                const candle = candles[i];
+                if (candle.x >= rect.startTime && candle.x <= rect.endTime) {
+                    // Üst kenar temas kontrolü (SAT sinyali)
+                    if (Math.abs(candle.high - rect.upper) <= upperTolerance) {
+                        const signal = {
+                            type: 'sellSignal',
+                            time: candle.x,
+                            price: candle.high,
+                            color: '#ef5350' // kırmızı
+                        };
+                        this.chartView.drawings.push(signal);
+                    }
+                    
+                    // Alt kenar temas kontrolü (AL sinyali)
+                    if (Math.abs(candle.low - rect.lower) <= lowerTolerance) {
+                        const signal = {
+                            type: 'buySignal',
+                            time: candle.x,
+                            price: candle.low,
+                            color: '#26a69a' // yeşil
+                        };
+                        this.chartView.drawings.push(signal);
+                    }
+                }
+            }
         });
     }
 
