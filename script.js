@@ -99,6 +99,10 @@ class CryptoData {
 
     selectPeriod(period) {
         this.selectedPeriod = period;
+        // Periyot değiştiğinde görünür aralığı sıfırla
+        if (window.chartView) {
+            window.chartView.visibleRange = { start: 0, end: 0 };
+        }
         this.fetchCandlestickData();
         this.updatePeriodSelect();
     }
@@ -691,55 +695,32 @@ class ChartView {
         
         this.calculateRanges();
         
-        // İlk kez veri yüklendiğinde görünür aralığı ayarla
+        // İlk kez veri yüklendiğinde veya periyot değiştiğinde görünür aralığı ayarla
         if (this.visibleRange.start === 0 && this.visibleRange.end === 0) {
-            // İlk yüklemede son mumun ortada olması için görünür alanı ayarla
+            // Son 100 mumu göster
+            const targetCandleCount = 100;
             
-            // Tüm verilerin zaman aralığını hesapla
-            const totalTimeRange = this.timeRange.end - this.timeRange.start;
+            // Eğer veri 100 mumdan azsa, tüm verileri göster
+            const visibleCandles = Math.min(targetCandleCount, this.data.length);
             
-            // Görünür aralığın genişliğini belirle (zoom faktörü)
-            // Daha yakın zoom için daha düşük bir değer kullan
-            const visibleRangeWidth = totalTimeRange * 0.12; // Azaltıldı - önceki değer: 0.25
+            // Son mumun indeksi
+            const lastCandleIndex = this.data.length - 1;
             
-            // Son mumu tam ortada göstermek için:
-            // 1. Görünür genişliğin yarısı kadar sola git (geçmiş veriler)
-            // 2. Görünür genişliğin yarısı kadar sağa git (gelecek için boş alan)
-            const lastCandleTime = this.timeRange.end;
-            const halfVisibleWidth = visibleRangeWidth / 2;
+            // Görünür aralığın başlangıç indeksi
+            const startIndex = Math.max(0, lastCandleIndex - visibleCandles + 1);
             
-            // Son mum ortalanacak şekilde görünür aralığı ayarla
-            this.visibleRange.start = lastCandleTime - halfVisibleWidth;
-            this.visibleRange.end = lastCandleTime + halfVisibleWidth;
+            // Görünür aralığın başlangıç ve bitiş zamanları
+            this.visibleRange.start = this.data[startIndex].x;
+            this.visibleRange.end = this.data[lastCandleIndex].x;
             
-            // Sınır kontrolü - end değerinin en fazla timeRange.end olması lazım
-            if (this.visibleRange.end > this.timeRange.end) {
-                this.visibleRange.end = this.timeRange.end;
-            }
-            
-            // Sınır kontrolü - start değerinin en az timeRange.start olması lazım
-            if (this.visibleRange.start < this.timeRange.start) {
-                this.visibleRange.start = this.timeRange.start;
-            }
-            
-            // Eğer sağ sınırda sonlandıysak, görünür genişliği korumak için sola doğru uzat
-            if (this.visibleRange.end === this.timeRange.end) {
-                this.visibleRange.start = Math.max(
-                    this.timeRange.start,
-                    this.visibleRange.end - visibleRangeWidth
-                );
-            }
-            
-            // Eğer sol sınırda sonlandıysak, görünür genişliği korumak için sağa doğru uzat
-            if (this.visibleRange.start === this.timeRange.start) {
-                this.visibleRange.end = Math.min(
-                    this.timeRange.end,
-                    this.visibleRange.start + visibleRangeWidth
-                );
-            }
+            // Sağ kenardan boşluk bırakmak için görünür aralığı genişlet
+            const timeRange = this.visibleRange.end - this.visibleRange.start;
+            const rightPadding = timeRange * 0.3; // %30 boşluk
+            this.visibleRange.end += rightPadding;
             
             // Zoom seviyesini ayarla
-            this.zoomLevel = totalTimeRange / (this.visibleRange.end - this.visibleRange.start);
+            this.zoomLevel = (this.timeRange.end - this.timeRange.start) / 
+                            (this.visibleRange.end - this.visibleRange.start);
             
             // Make sure to update axes explicitly after setting visible range
             this.updatePriceAxis();
@@ -771,18 +752,26 @@ class ChartView {
         this.priceAxisElement.innerHTML = '';
         
         const height = this.canvas.height;
-        const priceRange = this.priceRange.max - this.priceRange.min;
         
-        // Guard against zero or invalid price range
-        if (priceRange <= 0 || !isFinite(priceRange)) return;
+        // Sadece ekranda görünen mumlar (buffer yok)
+        const visibleData = this.data.filter(d => d.x >= this.visibleRange.start && d.x <= this.visibleRange.end);
+        if (visibleData.length === 0) return;
+        
+        // Fiyat aralığını görünür mumlara göre hesapla
+        const min = Math.min(...visibleData.map(candle => candle.low));
+        const max = Math.max(...visibleData.map(candle => candle.high));
+        const pricePadding = (max - min) * 0.02;
+        const priceRangeMin = min - pricePadding;
+        const priceRangeMax = max + pricePadding;
+        const priceRange = priceRangeMax - priceRangeMin;
         
         // TradingView'deki gibi dinamik fiyat adımları
         const priceStep = this.calculatePriceStep(priceRange);
-        const firstStep = Math.ceil(this.priceRange.min / priceStep) * priceStep;
+        const firstStep = Math.ceil(priceRangeMin / priceStep) * priceStep;
         
         // Fiyat çizgileri ve etiketleri oluştur
-        for (let price = firstStep; price <= this.priceRange.max; price += priceStep) {
-            const y = height - ((price - this.priceRange.min) / priceRange * height);
+        for (let price = firstStep; price <= priceRangeMax; price += priceStep) {
+            const y = height - ((price - priceRangeMin) / priceRange * height);
             
             // Çizgi
             const priceLine = document.createElement('div');
@@ -798,7 +787,7 @@ class ChartView {
                 maximumFractionDigits: 2
             });
             priceLabel.style.position = 'absolute';
-            priceLabel.style.top = `${y - 10}px`;  // Çizginin üzerine hizala
+            priceLabel.style.top = `${y - 10}px`;
             this.priceAxisElement.appendChild(priceLabel);
         }
     }
@@ -916,19 +905,26 @@ class ChartView {
 
         if (this.data.length === 0) return;
 
-        // Görünür verileri filtrele - daha fazla veri çizelim ki
-        // kaydırma sırasında boşluk görünmesin
-        const bufferRatio = 0.5; // Daha geniş bir tampon alanı için
+        // Sadece ekranda görünen mumlar (buffer yok)
+        const visibleData = this.data.filter(d => d.x >= this.visibleRange.start && d.x <= this.visibleRange.end);
+        if (visibleData.length === 0) return;
+
+        // Fiyat aralığını sadece ekranda görünen mumlara göre ayarla
+        this.priceRange.min = Math.min(...visibleData.map(candle => candle.low));
+        this.priceRange.max = Math.max(...visibleData.map(candle => candle.high));
+        const pricePadding = (this.priceRange.max - this.priceRange.min) * 0.02;
+        this.priceRange.min -= pricePadding;
+        this.priceRange.max += pricePadding;
+
+        // Performans için buffer'lı veri (sadece çizim için, min/max için değil)
+        const bufferRatio = 0.5;
         const bufferWidth = (this.visibleRange.end - this.visibleRange.start) * bufferRatio;
-        
-        const visibleData = this.data.filter(d => 
+        const bufferedData = this.data.filter(d => 
             d.x >= this.visibleRange.start - bufferWidth && 
             d.x <= this.visibleRange.end + bufferWidth
         );
+        if (bufferedData.length === 0) return;
 
-        // Performans iyileştirmesi - boş veri olmadığından emin ol
-        if (visibleData.length === 0) return;
-        
         // Önce grid (arka plan) çiz
         this.drawGrid();
         
@@ -1936,6 +1932,39 @@ class TechnicalAnalysis {
                 updated.push({ ...rect, status, violationCount });
             }
             
+            // --- SON KUTU UZATMA ---
+            if (updated.length > 0) {
+                const lastRect = updated[updated.length - 1];
+                const price = latestCandle.close;
+                if (lastRect.status === 'active' && price <= lastRect.upper && price >= lastRect.lower) {
+                    // Son mumdan 10 mum sonrası
+                    const candles = this.chartView.data;
+                    const lastCandle = candles[candles.length - 1];
+                    // 10 mum sonrası varsa, yoksa son mumun zamanı + 10x ortalama aralık
+                    let newEndTime;
+                    if (candles.length >= 11) {
+                        const idx = candles.length - 1;
+                        const tenthAhead = candles[idx]?.x + (candles[idx]?.x - candles[idx-1]?.x) * 10;
+                        // Eğer 10 mum sonrası varsa, onun zamanını kullan
+                        if (candles[idx + 10]) {
+                            newEndTime = candles[idx + 10].x;
+                        } else {
+                            newEndTime = tenthAhead;
+                        }
+                    } else {
+                        // Yeterli mum yoksa, son mumun zamanı + 10x ortalama aralık
+                        const avgInterval = (candles[candles.length-1].x - candles[0].x) / (candles.length-1);
+                        newEndTime = candles[candles.length-1].x + avgInterval * 10;
+                    }
+                    // Sadece ileriye doğru uzat (geri gitmesin)
+                    if (newEndTime > lastRect.endTime) {
+                        lastRect.endTime = newEndTime;
+                        updated[updated.length - 1] = lastRect;
+                    }
+                }
+            }
+            // --- SON KUTU UZATMA SONU ---
+            
             // Aktif ve tamamlanmış kutuları ayır
             this.activeRectangles = updated.filter(r => r.status === 'active');
             this.completedRectangles = [
@@ -2035,4 +2064,857 @@ document.addEventListener('DOMContentLoaded', () => {
     // Algoritma buton metnini güncelle
     const runButton = document.getElementById('runAlgorithm');
     if (runButton) runButton.textContent = 'SDA – Squeeze Detection Algorithm';
+
+    // TradingView'e Git butonu event
+    const tradingviewBtn = document.getElementById('tradingviewBtn');
+    // --- BACKTEST BUTONU EKLE ---
+    if (tradingviewBtn) {
+        // Backtest butonunu oluştur
+        const backtestBtn = document.createElement('button');
+        backtestBtn.id = 'backtestBtn';
+        backtestBtn.textContent = 'Backtest';
+        backtestBtn.style.backgroundColor = '#4F46E5';
+        backtestBtn.style.color = 'white';
+        backtestBtn.style.padding = '8px 16px';
+        backtestBtn.style.border = 'none';
+        backtestBtn.style.borderRadius = '4px';
+        backtestBtn.style.cursor = 'pointer';
+        backtestBtn.style.marginLeft = '10px';
+        backtestBtn.style.fontWeight = 'bold';
+        backtestBtn.style.fontSize = '15px';
+        tradingviewBtn.parentNode.insertBefore(backtestBtn, tradingviewBtn.nextSibling);
+
+        // Modal pencereyi oluştur (ilk başta gizli)
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = 'backtestModalOverlay';
+        modalOverlay.style.position = 'fixed';
+        modalOverlay.style.top = '0';
+        modalOverlay.style.left = '0';
+        modalOverlay.style.width = '100vw';
+        modalOverlay.style.height = '100vh';
+        modalOverlay.style.background = 'rgba(0,0,0,0.45)';
+        modalOverlay.style.display = 'none';
+        modalOverlay.style.zIndex = '9999';
+        modalOverlay.style.justifyContent = 'center';
+        modalOverlay.style.alignItems = 'center';
+
+        const modal = document.createElement('div');
+        modal.id = 'backtestModal';
+        modal.style.background = '#181C2A';
+        modal.style.borderRadius = '12px';
+        modal.style.boxShadow = '0 8px 32px rgba(0,0,0,0.25)';
+        modal.style.padding = '32px 32px 24px 32px';
+        modal.style.minWidth = '400px';
+        modal.style.maxWidth = '95vw';
+        modal.style.maxHeight = '90vh';
+        modal.style.position = 'relative';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.alignItems = 'center';
+        modal.style.overflowY = 'auto';
+
+        // Kapatma butonu
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '12px';
+        closeBtn.style.right = '16px';
+        closeBtn.style.background = 'transparent';
+        closeBtn.style.border = 'none';
+        closeBtn.style.color = '#fff';
+        closeBtn.style.fontSize = '22px';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.addEventListener('click', () => {
+            modalOverlay.style.display = 'none';
+        });
+        modal.appendChild(closeBtn);
+
+        // --- Backtest adım 1: Mum sayısı sor ---
+        const askDiv = document.createElement('div');
+        askDiv.style.display = 'flex';
+        askDiv.style.flexDirection = 'column';
+        askDiv.style.alignItems = 'center';
+        askDiv.style.margin = '24px 0 12px 0';
+        const askLabel = document.createElement('label');
+        askLabel.textContent = 'Kaç mumluk geçmişle backtest yapılsın?';
+        askLabel.style.color = '#fff';
+        askLabel.style.fontSize = '16px';
+        askLabel.style.marginBottom = '8px';
+        const askInput = document.createElement('input');
+        askInput.type = 'number';
+        askInput.min = '10';
+        askInput.max = '1000';
+        askInput.value = '100';
+        askInput.style.padding = '6px 10px';
+        askInput.style.fontSize = '15px';
+        askInput.style.borderRadius = '4px';
+        askInput.style.border = '1px solid #333';
+        askInput.style.width = '120px';
+        askInput.style.marginBottom = '8px';
+        const askBtn = document.createElement('button');
+        askBtn.textContent = 'Onayla';
+        askBtn.style.background = '#4F46E5';
+        askBtn.style.color = '#fff';
+        askBtn.style.border = 'none';
+        askBtn.style.borderRadius = '4px';
+        askBtn.style.padding = '7px 18px';
+        askBtn.style.fontWeight = 'bold';
+        askBtn.style.cursor = 'pointer';
+        askDiv.appendChild(askLabel);
+        askDiv.appendChild(askInput);
+        askDiv.appendChild(askBtn);
+        modal.appendChild(askDiv);
+
+        // --- Backtest adım 2: Grafik, SDA ve bot alanı ---
+        const backtestPanel = document.createElement('div');
+        backtestPanel.style.display = 'none';
+        backtestPanel.style.flexDirection = 'column';
+        backtestPanel.style.alignItems = 'center';
+        backtestPanel.style.width = '100%';
+
+        // Grafik
+        const chartCanvas = document.createElement('canvas');
+        chartCanvas.width = 700;
+        chartCanvas.height = 350;
+        chartCanvas.style.background = '#23263a';
+        chartCanvas.style.borderRadius = '8px';
+        chartCanvas.style.margin = '12px 0 18px 0';
+        backtestPanel.appendChild(chartCanvas);
+
+        // SDA butonu
+        const sdaBtn = document.createElement('button');
+        sdaBtn.textContent = "SDA'yı Çalıştır & Sinyalleri Üret";
+        sdaBtn.style.background = '#2196F3';
+        sdaBtn.style.color = '#fff';
+        sdaBtn.style.border = 'none';
+        sdaBtn.style.borderRadius = '4px';
+        sdaBtn.style.padding = '8px 18px';
+        sdaBtn.style.fontWeight = 'bold';
+        sdaBtn.style.fontSize = '15px';
+        sdaBtn.style.cursor = 'pointer';
+        sdaBtn.style.marginBottom = '18px';
+        backtestPanel.appendChild(sdaBtn);
+
+        // Bot konfig alanı (başta gizli)
+        const configDiv = document.createElement('div');
+        configDiv.style.display = 'none';
+        configDiv.style.flexDirection = 'row';
+        configDiv.style.gap = '18px';
+        configDiv.style.marginBottom = '18px';
+        configDiv.style.justifyContent = 'center';
+        configDiv.style.alignItems = 'center';
+        configDiv.innerHTML = `
+            <label style="color:#fff;font-size:15px;">Bakiye: <input id="backtestBalance" type="number" value="10000" style="width:80px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
+            <label style="color:#fff;font-size:15px;">Strateji: 
+                <select id="backtestStrategy" style="padding:3px 6px;border-radius:3px;">
+                    <option value="sda">SDA</option>
+                    <option value="sma-cross">SMA Cross</option>
+                    <option value="price-threshold">Price Threshold</option>
+                </select>
+            </label>
+            <label style="color:#fff;font-size:15px;">Min Profit %: <input id="backtestMinProfit" type="number" value="1" min="0.1" max="5" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
+            <label style="color:#fff;font-size:15px;">Max Stop %: <input id="backtestMaxStop" type="number" value="1" min="0.1" max="2" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
+        `;
+        backtestPanel.appendChild(configDiv);
+
+        // Botu Başlat butonu (başta gizli)
+        const startBtn = document.createElement('button');
+        startBtn.textContent = 'Botu Başlat';
+        startBtn.style.background = '#22c55e';
+        startBtn.style.color = '#fff';
+        startBtn.style.border = 'none';
+        startBtn.style.borderRadius = '4px';
+        startBtn.style.padding = '8px 22px';
+        startBtn.style.fontWeight = 'bold';
+        startBtn.style.fontSize = '16px';
+        startBtn.style.cursor = 'pointer';
+        startBtn.style.display = 'none';
+        backtestPanel.appendChild(startBtn);
+
+        // İşlem tablosu (başta gizli)
+        const tableDiv = document.createElement('div');
+        tableDiv.style.display = 'none';
+        tableDiv.style.width = '100%';
+        tableDiv.style.maxHeight = '180px';
+        tableDiv.style.overflowY = 'auto';
+        tableDiv.innerHTML = `
+            <table style="width:100%;background:#23263a;color:#fff;border-radius:6px;overflow:hidden;font-size:14px;">
+                <thead><tr style="background:#222;"><th>Zaman</th><th>İşlem</th><th>Fiyat</th><th>Miktar</th><th>Güncel Bakiye</th></tr></thead>
+                <tbody id="backtestTradeTableBody"></tbody>
+            </table>
+        `;
+        backtestPanel.appendChild(tableDiv);
+
+        modal.appendChild(backtestPanel);
+
+        // Onayla'ya basınca backtest grafiğini hazırla
+        askBtn.addEventListener('click', () => {
+            let n = parseInt(askInput.value);
+            if (isNaN(n) || n < 10) n = 10;
+            // Sadece 4 saatlik periyot datası ile çalış
+            const allData = window.chartView ? window.chartView.data : [];
+            const period = window.cryptoData ? window.cryptoData.selectedPeriod : '4h';
+            if (period !== '4h') {
+                alert('Backtest sadece 4 saatlik periyotta çalışır.');
+                return;
+            }
+            // Backtest datası ve eklenecek mumlar
+            const backtestData = allData.slice(0, allData.length - n);
+            const toAddCandles = allData.slice(allData.length - n);
+            // Son 100 muma zoom
+            const zoomCount = 100;
+            const zoomStart = Math.max(0, backtestData.length - zoomCount);
+            let zoomData = backtestData.slice(zoomStart);
+            // Grafik state
+            let chartState = {
+                candles: [...zoomData],
+                allCandles: [...backtestData],
+                toAdd: [...toAddCandles],
+                signals: [],
+                boxes: [],
+                trades: [],
+                bot: null,
+                sdaActive: false,
+                botActive: false,
+                interval: null
+            };
+            // Basit chart çizim fonksiyonu (kutular ve sinyaller dahil)
+            function drawBacktestChart() {
+                const ctx = chartCanvas.getContext('2d');
+                ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+                if (chartState.candles.length === 0) return;
+                // Fiyat aralığı
+                const min = Math.min(...chartState.candles.map(c => c.low));
+                const max = Math.max(...chartState.candles.map(c => c.high));
+                const pricePadding = (max - min) * 0.05;
+                const priceMin = min - pricePadding;
+                const priceMax = max + pricePadding;
+                // Mumları çiz
+                chartState.candles.forEach((candle, i) => {
+                    const x = 40 + (i / (chartState.candles.length-1)) * (chartCanvas.width-80);
+                    const openY = chartCanvas.height - ((candle.open - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    const closeY = chartCanvas.height - ((candle.close - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    const highY = chartCanvas.height - ((candle.high - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    const lowY = chartCanvas.height - ((candle.low - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    // Wick
+                    ctx.strokeStyle = '#888';
+                    ctx.beginPath();
+                    ctx.moveTo(x, highY);
+                    ctx.lineTo(x, lowY);
+                    ctx.stroke();
+                    // Body
+                    ctx.strokeStyle = ctx.fillStyle = candle.close >= candle.open ? '#26a69a' : '#ef5350';
+                    ctx.fillRect(x-3, Math.min(openY, closeY), 6, Math.max(2, Math.abs(openY-closeY)));
+                });
+                // Kutuları çiz
+                chartState.boxes.forEach(box => {
+                    const startIdx = chartState.candles.findIndex(c => c.x === box.startTime);
+                    const endIdx = chartState.candles.findIndex(c => c.x === box.endTime);
+                    if (startIdx === -1 || endIdx === -1) return;
+                    const x1 = 40 + (startIdx / (chartState.candles.length-1)) * (chartCanvas.width-80);
+                    const x2 = 40 + (endIdx / (chartState.candles.length-1)) * (chartCanvas.width-80);
+                    const y1 = chartCanvas.height - ((box.upper - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    const y2 = chartCanvas.height - ((box.lower - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    ctx.save();
+                    ctx.strokeStyle = box.status === 'completed' ? '#888' : '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([6, 4]);
+                    ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+                    ctx.restore();
+                });
+                // Sinyalleri çiz
+                chartState.signals.forEach(sig => {
+                    const idx = chartState.candles.findIndex(c => c.x === sig.time);
+                    if (idx === -1) return;
+                    const x = 40 + (idx / (chartState.candles.length-1)) * (chartCanvas.width-80);
+                    const y = chartCanvas.height - ((sig.price - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+                    ctx.save();
+                    ctx.fillStyle = sig.type === 'buySignal' ? '#26a69a' : '#ef5350';
+                    ctx.beginPath();
+                    if (sig.type === 'buySignal') {
+                        ctx.moveTo(x, y-12); ctx.lineTo(x-7, y+7); ctx.lineTo(x+7, y+7);
+                    } else {
+                        ctx.moveTo(x, y+12); ctx.lineTo(x-7, y-7); ctx.lineTo(x+7, y-7);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+            drawBacktestChart();
+            // --- SDA Algoritması (modal için izole) ---
+            function runSDA(candles) {
+                // Aynı mantıkla kutu ve sinyal üretimi (kısa, sade versiyon)
+                const minWindow = 20, maxWindow = 50, rangeThreshold = 5, minInRangeRatio = 0.8, maxDistancePercent = 20;
+                let boxes = [];
+                for (let windowSize = minWindow; windowSize <= maxWindow; windowSize += 5) {
+                    for (let i = 0; i <= candles.length - windowSize; i++) {
+                        const window = candles.slice(i, i + windowSize);
+                        const highs = window.map(c => c.high);
+                        const lows = window.map(c => c.low);
+                        const high = Math.max(...highs);
+                        const low = Math.min(...lows);
+                        const rangePercent = ((high - low) / low) * 100;
+                        if (rangePercent > rangeThreshold) continue;
+                        const inRange = window.filter(c => c.high <= high && c.low >= low).length;
+                        if (inRange / windowSize < minInRangeRatio) continue;
+                        const currentPrice = candles[candles.length-1].close;
+                        const distToCurrent = Math.min(Math.abs(currentPrice - high), Math.abs(currentPrice - low)) / currentPrice * 100;
+                        if (distToCurrent > maxDistancePercent) continue;
+                        boxes.push({ upper: high, lower: low, startTime: window[0].x, endTime: window[window.length-1].x, status: 'active' });
+                    }
+                }
+                // Çakışan kutuları temizle (kısa versiyon)
+                boxes.sort((a, b) => a.startTime - b.startTime);
+                const result = [];
+                for (const box of boxes) {
+                    let overlap = false;
+                    for (const r of result) {
+                        if (!(box.endTime < r.startTime || box.startTime > r.endTime)) {
+                            const boxLen = box.endTime - box.startTime;
+                            const rLen = r.endTime - r.startTime;
+                            if (boxLen > rLen) Object.assign(r, box);
+                            overlap = true; break;
+                        }
+                    }
+                    if (!overlap) result.push(box);
+                }
+                // Sinyal üretimi
+                let signals = [];
+                result.forEach(rect => {
+                    const upperTol = rect.upper * 0.003, lowerTol = rect.lower * 0.003;
+                    for (let i = 0; i < candles.length; i++) {
+                        const c = candles[i];
+                        if (c.x >= rect.startTime && c.x <= rect.endTime) {
+                            if (Math.abs(c.high - rect.upper) <= upperTol) signals.push({ type: 'sellSignal', time: c.x, price: c.high });
+                            if (Math.abs(c.low - rect.lower) <= lowerTol) signals.push({ type: 'buySignal', time: c.x, price: c.low });
+                        }
+                    }
+                });
+                return { boxes: result, signals };
+            }
+            // --- TradeBot (modal için izole) ---
+            class ModalTradeBot {
+                constructor(getData, onTrade, config) {
+                    this.getData = getData;
+                    this.onTrade = onTrade;
+                    this.balance = Number(config.balance) || 10000;
+                    this.position = 0;
+                    this.lastAction = null;
+                    this.strategy = config.strategy;
+                    this.minProfit = Math.min(Math.max(Number(config.minProfit) / 100, 0.001), 0.05) || 0.01;
+                    this.maxStop = Math.min(Math.max(Number(config.maxStop) / 100, 0.001), 0.02) || 0.01;
+                    this.buyPrice = null;
+                    this.processedSignals = new Set();
+                    this.hasBoughtOnce = false; // YENİ: İlk buy sinyali gelene kadar bekle
+                    this.lastBox = null; // YENİ: Son SDA kutusu
+                }
+                run() {
+                    const data = this.getData();
+                    if (!data || data.length < 50) return;
+                    const price = data[data.length-1].close;
+                    let action = null;
+                    let reason = '';
+                    if (this.strategy === 'sda') {
+                        // Son aktif kutuyu bul
+                        const boxes = chartState.boxes;
+                        const lastBox = boxes.length > 0 ? boxes[boxes.length-1] : null;
+                        this.lastBox = lastBox;
+                        if (this.position === 0 && lastBox) {
+                            const lower = Math.min(lastBox.upper, lastBox.lower);
+                            const lowerTol = lower * 0.003; // %0.3 tolerans (SDA ile aynı)
+                            if (price <= lower + lowerTol && price >= lower - lowerTol) {
+                                action = 'buy';
+                                reason = 'Box Lower Touch';
+                            }
+                        } else if (this.position > 0 && this.buyPrice !== null && lastBox) {
+                            const upper = Math.max(lastBox.upper, lastBox.lower);
+                            const upperTol = upper * 0.003; // %0.3 tolerans (SDA ile aynı)
+                            if (price >= upper - upperTol && price <= upper + upperTol) {
+                                action = 'sell';
+                                reason = 'Box Upper Touch';
+                            } else if (price >= this.buyPrice * (1 + this.minProfit)) {
+                                action = 'sell';
+                                reason = 'Take Profit';
+                            } else if (price <= this.buyPrice * (1 - this.maxStop)) {
+                                action = 'sell';
+                                reason = 'Stop Loss';
+                            }
+                        }
+                    }
+                    // Diğer stratejilerde işlem yapma
+                    if (action === 'buy') {
+                        this.position += 1;
+                        this.balance -= price;
+                        this.buyPrice = price;
+                        this.lastAction = {type: 'Al', price, amount: 1, balance: this.balance + this.position * price, reason};
+                        this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                    } else if (action === 'sell') {
+                        this.balance += price * this.position;
+                        this.lastAction = {type: 'Sat', price, amount: this.position, balance: this.balance, reason};
+                        this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                        this.position = 0;
+                        this.buyPrice = null;
+                    }
+                }
+            }
+            // --- SDA butonuna basınca ---
+            sdaBtn.onclick = () => {
+                // SDA çalıştır, sinyalleri ve kutuları güncelle
+                const { boxes, signals } = runSDA(chartState.candles);
+                chartState.boxes = boxes;
+                chartState.signals = signals;
+                drawBacktestChart();
+                sdaBtn.style.display = 'none';
+                configDiv.style.display = 'flex';
+                startBtn.style.display = 'inline-block';
+                tableDiv.style.display = 'block';
+            };
+            // --- Botu Başlat butonuna basınca ---
+            startBtn.onclick = () => {
+                if (chartState.botActive) return;
+                chartState.botActive = true;
+                // Update button appearance
+                startBtn.style.backgroundColor = '#666';
+                startBtn.textContent = 'Bot Çalışıyor';
+                startBtn.disabled = true;
+                
+                // Bot konfigürasyonunu al
+                const config = {
+                    balance: document.getElementById('backtestBalance').value,
+                    strategy: document.getElementById('backtestStrategy').value,
+                    minProfit: document.getElementById('backtestMinProfit').value,
+                    maxStop: document.getElementById('backtestMaxStop').value
+                };
+                chartState.bot = new ModalTradeBot(() => chartState.candles, trade => {
+                    // İşlem tablosuna ekle
+                    const tbody = document.getElementById('backtestTradeTableBody');
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>`;
+                    tbody.appendChild(row);
+                }, config);
+                // Zincirleme animasyon başlat
+                function animateNextCandle() {
+                    if (chartState.toAdd.length === 0) return;
+                    const nextCandle = chartState.toAdd.shift();
+                    animateCandle(chartState, chartCanvas, nextCandle, 4000, (animState) => {
+                        chartState.candles.push(nextCandle);
+                        // SDA ve sinyalleri güncelle
+                        const { boxes, signals } = runSDA(chartState.candles);
+                        chartState.boxes = boxes;
+                        chartState.signals = signals;
+                        // Botu çalıştır
+                        chartState.bot.run();
+                        drawBacktestChart(chartState, chartCanvas);
+                        setTimeout(animateNextCandle, 1000); // 1 sn bekle, sonra sıradaki muma geç
+                    }, drawBacktestChart);
+                }
+                animateNextCandle();
+            };
+            // ---
+            askDiv.style.display = 'none';
+            backtestPanel.style.display = 'flex';
+            sdaBtn.style.display = 'block';
+            configDiv.style.display = 'none';
+            startBtn.style.display = 'none';
+            tableDiv.style.display = 'none';
+        });
+
+        modalOverlay.appendChild(modal);
+        document.body.appendChild(modalOverlay);
+
+        // Butona tıklayınca modalı göster
+        backtestBtn.addEventListener('click', () => {
+            modalOverlay.style.display = 'flex';
+        });
+    }
+    // --- BACKTEST BUTONU SONU ---
+
+    if (tradingviewBtn) {
+        tradingviewBtn.addEventListener('click', function() {
+            // Sembol ve periyodu CryptoData'dan al
+            let symbol = window.cryptoData ? window.cryptoData.selectedSymbol : 'BTCUSDT';
+            let period = window.cryptoData ? window.cryptoData.selectedPeriod : '4h';
+            // TradingView periyot eşlemesi
+            const periodMap = {
+                '1h': '60',
+                '4h': '240',
+                '1d': '1D',
+                '1w': '1W',
+                '1M': '1M'
+            };
+            let tvPeriod = periodMap[period] || '60';
+            // Sembolü TradingView formatına çevir (ör: BTCUSDT -> BINANCE:BTCUSDT)
+            let tvSymbol = 'BINANCE:' + symbol;
+            let url = `https://www.tradingview.com/chart/?symbol=${tvSymbol}&interval=${tvPeriod}`;
+            window.open(url, '_blank');
+        });
+    }
+
+    const maxStopInput = document.getElementById('maxStop');
+    const maxStopMsg = document.getElementById('maxStopMsg');
+
+    function checkBotStartEnable() {
+        const minProfitVal = parseFloat(minProfitInput.value);
+        const maxStopVal = parseFloat(maxStopInput.value);
+        let disable = false;
+        if (minProfitVal > 5) disable = true;
+        if (maxStopVal > 2) disable = true;
+        if (disable) {
+            startBtn.classList.add('disabled');
+            startBtn.disabled = true;
+        } else {
+            startBtn.classList.remove('disabled');
+            startBtn.disabled = false;
+        }
+    }
+    minProfitInput.addEventListener('input', function() {
+        const val = parseFloat(minProfitInput.value);
+        if (val > 5) {
+            minProfitMsg.textContent = 'Algoritmanın çalışma presibine göre maksimum %5 girmeniz tavsiye edilir.';
+            minProfitMsg.style.display = 'block';
+        } else {
+            minProfitMsg.textContent = '';
+            minProfitMsg.style.display = 'none';
+        }
+        checkBotStartEnable();
+    });
+    maxStopInput.addEventListener('input', function() {
+        const val = parseFloat(maxStopInput.value);
+        if (val > 2) {
+            maxStopMsg.textContent = 'Algoritmanın çalışma prensibine göre maximum %2 girmeniz tavsiye edilir';
+            maxStopMsg.style.display = 'block';
+        } else {
+            maxStopMsg.textContent = '';
+            maxStopMsg.style.display = 'none';
+        }
+        checkBotStartEnable();
+    });
+
+    // ... existing code ...
+    if (startBtn && stopBtn) {
+        startBtn.addEventListener('click', function() {
+            if (parseFloat(minProfitInput.value) > 5 || parseFloat(maxStopInput.value) > 2) return;
+            tableBody.innerHTML = '';
+            tradeBot = new TradeBot({
+                getData: () => window.chartView ? window.chartView.data : [],
+                getSymbol: () => window.cryptoData ? window.cryptoData.selectedSymbol : 'BTCUSDT',
+                getPeriod: () => window.cryptoData ? window.cryptoData.selectedPeriod : '4h',
+                onTrade: updateTradeHistory
+            });
+            tradeBot.start(balanceInput.value, strategyInput.value, minProfitInput.value, maxStopInput.value);
+            setBotButtons(true);
+            setBotStatus('Bot çalışıyor...', '#26a69a');
+            // Update start button appearance
+            startBtn.style.backgroundColor = '#666';
+            startBtn.textContent = 'Bot Çalışıyor';
+        });
+        stopBtn.addEventListener('click', function() {
+            if (tradeBot) tradeBot.stop();
+            setBotButtons(false);
+            setBotStatus('Bot durduruldu', '#ef5350');
+            // Reset start button appearance
+            startBtn.style.backgroundColor = '#26a69a';
+            startBtn.textContent = 'Botu Başlat';
+        });
+    }
+
+    const buyPriceInput = document.getElementById('buyPrice');
+    const targetSellPriceInput = document.getElementById('targetSellPrice');
+    // ... existing code ...
+    // TradeBot UI entegrasyonu
+    let tradeBot = null;
+    function updateTradeHistory(trade) {
+        const table = document.getElementById('tradeHistoryTable').querySelector('tbody');
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>`;
+        table.appendChild(row);
+        // Alış fiyatı ve tahmini satış fiyatı kutularını güncelle
+        if (trade.type === 'Al') {
+            buyPriceInput.value = trade.price.toFixed(2);
+            // minProfit yüzdesini al
+            const minProfitVal = parseFloat(document.getElementById('minProfit').value);
+            const target = trade.price * (1 + (minProfitVal/100));
+            targetSellPriceInput.value = target.toFixed(2);
+        } else if (trade.type === 'Sat') {
+            buyPriceInput.value = '';
+            targetSellPriceInput.value = '';
+        }
+    }
+
+    // Alış fiyatı ve tahmini satış fiyatı kutularını buySignal'a göre otomatik doldur
+    function updateBuyAndTargetFromLastBuySignal() {
+        const drawings = window.chartView && window.chartView.drawings ? window.chartView.drawings : [];
+        const minProfitVal = parseFloat(document.getElementById('minProfit').value);
+        const lastBuySignal = [...drawings].reverse().find(d => d.type === 'buySignal');
+        if (lastBuySignal) {
+            buyPriceInput.value = lastBuySignal.price.toFixed(2);
+            const target = lastBuySignal.price * (1 + (minProfitVal/100));
+            targetSellPriceInput.value = target.toFixed(2);
+        } else {
+            buyPriceInput.value = '';
+            targetSellPriceInput.value = '';
+        }
+    }
+    // minProfit değişirse tahmini satış fiyatı güncellensin
+    minProfitInput.addEventListener('input', updateBuyAndTargetFromLastBuySignal);
+    // Sinyaller değiştikçe de güncellensin (örneğin Generate Signals tıklandığında)
+    setInterval(updateBuyAndTargetFromLastBuySignal, 2000);
 }); 
+
+// TradeBot sınıfı ve entegrasyonu
+class TradeBot {
+    constructor({getData, getSymbol, getPeriod, onTrade}) {
+        this.getData = getData;
+        this.getSymbol = getSymbol;
+        this.getPeriod = getPeriod;
+        this.onTrade = onTrade;
+        this.running = false;
+        this.balance = 10000;
+        this.position = 0;
+        this.lastAction = null;
+        this.interval = null;
+        this.strategy = 'sma-cross';
+        this.tradeSize = 1; // 1 birimlik işlem
+        this.lastSmaState = null;
+        this.processedSignals = new Set(); // Sadece SDA için kullanılır
+        this.minProfit = 0.01; // Yüzde cinsinden, ör: 0.01 = %1
+        this.maxStop = 0.01; // Yüzde cinsinden, ör: 0.01 = %1
+        this.buyPrice = null; // Son alış fiyatı
+        this.hasBoughtOnce = false; // YENİ: İlk buy sinyali gelene kadar bekle
+        this.lastBox = null; // YENİ: Son SDA kutusu
+    }
+    start(balance, strategy, minProfit, maxStop) {
+        this.balance = Number(balance) || 10000;
+        this.position = 0;
+        this.lastAction = null;
+        this.strategy = strategy;
+        this.running = true;
+        this.lastSmaState = null;
+        this.processedSignals = new Set();
+        this.minProfit = Math.min(Math.max(Number(minProfit) / 100, 0.001), 0.05) || 0.01;
+        this.maxStop = Math.min(Math.max(Number(maxStop) / 100, 0.001), 0.02) || 0.01;
+        this.buyPrice = null;
+        this.hasBoughtOnce = false;
+        this.lastBox = null;
+        this.interval = setInterval(() => this.run(), 2000);
+    }
+    stop() {
+        this.running = false;
+        clearInterval(this.interval);
+        this.interval = null;
+    }
+    run() {
+        const data = this.getData();
+        if (!data || data.length < 50) return;
+        const price = data[data.length-1].close;
+        let action = null;
+        let reason = '';
+        if (this.strategy === 'sda') {
+            // SDA kutularını ve sinyallerini al
+            const drawings = window.chartView && window.chartView.drawings ? window.chartView.drawings : [];
+            // Son aktif kutuyu bul
+            const rectangles = drawings.filter(d => d.type === 'rectangle' && d.violationCount !== undefined && d.color !== '#888888');
+            const lastBox = rectangles.length > 0 ? rectangles[rectangles.length-1] : null;
+            this.lastBox = lastBox;
+            if (this.position === 0 && lastBox) {
+                // Alt sınır ve tolerans
+                const lower = Math.min(lastBox.startPrice, lastBox.endPrice);
+                const lowerTol = lower * 0.003; // %0.3 tolerans (SDA ile aynı)
+                if (price <= lower + lowerTol && price >= lower - lowerTol) {
+                    action = 'buy';
+                    reason = 'Box Lower Touch';
+                }
+            } else if (this.position > 0 && this.buyPrice !== null && lastBox) {
+                // Üst sınır ve tolerans
+                const upper = Math.max(lastBox.startPrice, lastBox.endPrice);
+                const upperTol = upper * 0.003; // %0.3 tolerans (SDA ile aynı)
+                if (price >= upper - upperTol && price <= upper + upperTol) {
+                    action = 'sell';
+                    reason = 'Box Upper Touch';
+                } else if (price >= this.buyPrice * (1 + this.minProfit)) {
+                    action = 'sell';
+                    reason = 'Take Profit';
+                } else if (price <= this.buyPrice * (1 - this.maxStop)) {
+                    action = 'sell';
+                    reason = 'Stop Loss';
+                }
+            }
+        }
+        // Diğer stratejilerde işlem yapma
+        if (action === 'buy') {
+            this.position += this.tradeSize;
+            this.balance -= price * this.tradeSize;
+            this.buyPrice = price;
+            this.lastAction = {type: 'Al', price, amount: this.tradeSize, balance: this.balance + this.position * price, reason};
+            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+        } else if (action === 'sell') {
+            this.balance += price * this.position;
+            this.lastAction = {type: 'Sat', price, amount: this.position, balance: this.balance, reason};
+            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+            this.position = 0;
+            this.buyPrice = null;
+        }
+    }
+}
+
+// TradeBot UI entegrasyonu
+let tradeBot = null;
+function updateTradeHistory(trade) {
+    const table = document.getElementById('tradeHistoryTable').querySelector('tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>`;
+    table.appendChild(row);
+}
+function setBotStatus(msg, color) {
+    const el = document.getElementById('botStatus');
+    el.textContent = msg;
+    el.style.color = color || '#26a69a';
+}
+function setBotButtons(running) {
+    const startBtn = document.getElementById('botStartBtn');
+    const stopBtn = document.getElementById('botStopBtn');
+    if (running) {
+        startBtn.classList.add('disabled');
+        startBtn.disabled = true;
+        stopBtn.classList.remove('disabled');
+        stopBtn.disabled = false;
+    } else {
+        startBtn.classList.remove('disabled');
+        startBtn.disabled = false;
+        stopBtn.classList.add('disabled');
+        stopBtn.disabled = true;
+    }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    // TradeBot başlat/durdur
+    const startBtn = document.getElementById('botStartBtn');
+    const stopBtn = document.getElementById('botStopBtn');
+    const balanceInput = document.getElementById('botBalance');
+    const strategyInput = document.getElementById('botStrategy');
+    const minProfitInput = document.getElementById('minProfit');
+    const maxStopInput = document.getElementById('maxStop');
+    const minProfitMsg = document.getElementById('minProfitMsg');
+    const maxStopMsg = document.getElementById('maxStopMsg');
+    const tableBody = document.getElementById('tradeHistoryTable').querySelector('tbody');
+    
+    setBotButtons(false);
+    setBotStatus('Bot durduruldu', '#ef5350');
+
+    function checkBotStartEnable() {
+        const minProfitVal = parseFloat(minProfitInput.value);
+        const maxStopVal = parseFloat(maxStopInput.value);
+        let disable = false;
+        if (minProfitVal > 5) disable = true;
+        if (maxStopVal > 2) disable = true;
+        if (disable) {
+            startBtn.classList.add('disabled');
+            startBtn.disabled = true;
+        } else {
+            startBtn.classList.remove('disabled');
+            startBtn.disabled = false;
+        }
+    }
+
+    // Min kar kontrolü
+    minProfitInput.addEventListener('input', function() {
+        const val = parseFloat(minProfitInput.value);
+        if (val > 5) {
+            minProfitMsg.textContent = 'Algoritmanın çalışma presibine göre maksimum %5 girmeniz tavsiye edilir.';
+            minProfitMsg.style.display = 'block';
+        } else {
+            minProfitMsg.textContent = '';
+            minProfitMsg.style.display = 'none';
+        }
+        checkBotStartEnable();
+    });
+
+    // Max stop kontrolü
+    maxStopInput.addEventListener('input', function() {
+        const val = parseFloat(maxStopInput.value);
+        if (val > 2) {
+            maxStopMsg.textContent = 'Algoritmanın çalışma prensibine göre maximum %2 girmeniz tavsiye edilir';
+            maxStopMsg.style.display = 'block';
+        } else {
+            maxStopMsg.textContent = '';
+            maxStopMsg.style.display = 'none';
+        }
+        checkBotStartEnable();
+    });
+
+    // İlk yüklemede buton durumunu kontrol et
+    checkBotStartEnable();
+
+    if (startBtn && stopBtn) {
+        startBtn.addEventListener('click', function() {
+            if (parseFloat(minProfitInput.value) > 5 || parseFloat(maxStopInput.value) > 2) return;
+            tableBody.innerHTML = '';
+            tradeBot = new TradeBot({
+                getData: () => window.chartView ? window.chartView.data : [],
+                getSymbol: () => window.cryptoData ? window.cryptoData.selectedSymbol : 'BTCUSDT',
+                getPeriod: () => window.cryptoData ? window.cryptoData.selectedPeriod : '4h',
+                onTrade: updateTradeHistory
+            });
+            tradeBot.start(balanceInput.value, strategyInput.value, minProfitInput.value, maxStopInput.value);
+            setBotButtons(true);
+            setBotStatus('Bot çalışıyor...', '#26a69a');
+            // Update start button appearance
+            startBtn.style.backgroundColor = '#666';
+            startBtn.textContent = 'Bot Çalışıyor';
+        });
+        stopBtn.addEventListener('click', function() {
+            if (tradeBot) tradeBot.stop();
+            setBotButtons(false);
+            setBotStatus('Bot durduruldu', '#ef5350');
+            // Reset start button appearance
+            startBtn.style.backgroundColor = '#26a69a';
+            startBtn.textContent = 'Botu Başlat';
+        });
+    }
+}); 
+
+// --- Animasyonlu mum fonksiyonu ---
+function animateCandle(chartState, chartCanvas, candle, duration, onComplete, drawChartFn) {
+    const candles = chartState.candles;
+    const i = candles.length;
+    const min = Math.min(...candles.map(c => c.low), candle.low);
+    const max = Math.max(...candles.map(c => c.high), candle.high);
+    const pricePadding = (max - min) * 0.05;
+    const priceMin = min - pricePadding;
+    const priceMax = max + pricePadding;
+    const x = 40 + (i / (candles.length + 1 - 1)) * (chartCanvas.width-80);
+    const start = performance.now();
+    function step(now) {
+        const elapsed = now - start;
+        let t = Math.min(elapsed / duration, 1);
+        let currentPrice = candle.open;
+        let highSoFar = candle.open;
+        let lowSoFar = candle.open;
+        if (t < 0.4) {
+            const t1 = t / 0.4;
+            highSoFar = candle.open + (candle.high - candle.open) * t1;
+            lowSoFar = candle.open + (candle.low - candle.open) * t1;
+            currentPrice = candle.open + (candle.close - candle.open) * t * 0.5;
+        } else {
+            const t2 = (t - 0.4) / 0.6;
+            highSoFar = candle.high;
+            lowSoFar = candle.low;
+            currentPrice = candle.open + (candle.close - candle.open) * t;
+        }
+        // Animasyonlu mumu parametre olarak çizdir
+        if (drawChartFn) {
+            drawChartFn(chartState, chartCanvas, {
+                ...candle,
+                currentPrice,
+                highSoFar,
+                lowSoFar
+            });
+        }
+        if (t < 1) {
+            requestAnimationFrame(step);
+        } else {
+            onComplete && onComplete();
+        }
+    }
+    requestAnimationFrame(step);
+}

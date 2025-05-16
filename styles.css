@@ -470,3 +470,61 @@ canvas:active {
 .analysis-results .signal.sell {
     color: #ef5350;
 } 
+
+.tradingview-button {
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.tradingview-button:hover {
+    background: #1769aa;
+}
+
+/* Trade Bot Tablo ve Butonları */
+#tradeHistoryTable {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 10px;
+    background: #181818;
+    color: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+}
+#tradeHistoryTable th, #tradeHistoryTable td {
+    border: 1px solid #222;
+    padding: 6px 8px;
+    text-align: center;
+}
+#tradeHistoryTable th {
+    background: #222;
+    color: #26a69a;
+    font-weight: 600;
+}
+#tradeHistoryTable tr:nth-child(even) {
+    background: #20232a;
+}
+#tradeHistoryTable tr:hover {
+    background: #263238;
+}
+#botStartBtn:not(.disabled) {
+    background: #26a69a;
+}
+#botStartBtn.disabled {
+    background: #333;
+    color: #999;
+    cursor: not-allowed;
+}
+#botStopBtn:not(.disabled) {
+    background: #ef5350;
+}
+#botStopBtn.disabled {
+    background: #333;
+    color: #999;
+    cursor: not-allowed;
+} 

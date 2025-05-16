@@ -85,6 +85,7 @@
                     <option value="1w">1 Hafta</option>
                     <option value="1M">1 Ay</option>
                 </select>
+                <button id="tradingviewBtn" class="tradingview-button" style="margin-left: 12px; padding: 8px 15px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">TradingView'e Git</button>
             </div>
             <div class="chart-container">
                 <div id="priceAxis"></div>
@@ -132,8 +133,55 @@
                     <h3>Trade Bot</h3>
                 </div>
                 <div class="module-content">
-                    <p>Otomatik alım satım stratejileri ve bot ayarları yakında bu kısımda yer alacak.</p>
-                    <button class="bot-button disabled">Bot Başlat</button>
+                    <form id="tradeBotSettings" style="margin-bottom: 10px;">
+                        <div style="margin-bottom:6px;">
+                            <label for="botBalance" style="font-size:13px;">Başlangıç Bakiye ($):</label>
+                            <input type="number" id="botBalance" value="10000" min="10" step="10" style="width:80px; margin:0 10px 0 5px;">
+                            <label for="botStrategy" style="font-size:13px;">Strateji:</label>
+                            <select id="botStrategy" style="margin-left:5px;">
+                                <option value="sma-cross">SMA Cross</option>
+                                <option value="price-threshold">Fiyat Seviyesi</option>
+                                <option value="sda" selected>SDA</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label for="minProfit" style="font-size:13px;">Minimum Profit %:</label>
+                            <input type="number" id="minProfit" value="1" min="0.1" max="5" step="0.1" style="width:60px; margin-left:5px;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label for="maxStop" style="font-size:13px;">Maximum Stop Loss %:</label>
+                            <input type="number" id="maxStop" value="1" min="0.1" max="2" step="0.1" style="width:60px; margin-left:5px;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label for="buyPrice" style="font-size:13px;">Alış fiyatı:</label>
+                            <input type="text" id="buyPrice" readonly style="width:80px; margin-left:5px; background:#fff; color:#000; border:none;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <label for="targetSellPrice" style="font-size:13px;">Tahmini satış fiyatı:</label>
+                            <input type="text" id="targetSellPrice" readonly style="width:110px; margin-left:5px; background:#fff; color:#000; border:none;">
+                        </div>
+                        <div id="minProfitMsg" style="color:#ef5350; font-size:12px; display:none; margin-bottom:4px;"></div>
+                        <div id="maxStopMsg" style="color:#ef5350; font-size:12px; display:none; margin-bottom:4px;"></div>
+                    </form>
+                    <button id="botStartBtn" class="bot-button">Botu Başlat</button>
+                    <button id="botStopBtn" class="bot-button disabled" style="margin-left:8px;">Durdur</button>
+                    <div id="botStatus" style="margin:10px 0 5px 0; font-size:13px; color:#26a69a;"></div>
+                    <div style="overflow-x:auto;">
+                        <table id="tradeHistoryTable" style="width:100%; font-size:12px; background:#181818; color:#fff; border-radius:4px; margin-top:10px;">
+                            <thead>
+                                <tr style="background:#222;">
+                                    <th>Zaman</th>
+                                    <th>İşlem</th>
+                                    <th>Fiyat</th>
+                                    <th>Miktar</th>
+                                    <th>Bakiye</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- İşlem geçmişi buraya eklenecek -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
