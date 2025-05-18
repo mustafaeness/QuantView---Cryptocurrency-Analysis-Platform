@@ -129,7 +129,7 @@ Ana sayfada "Haberler" bağlantısına tıklayarak kripto para haberlerine eriş
 
 - **Haberler Yüklenmiyor:** İnternet bağlantınızı kontrol edin veya CoinGecko API'nin erişilebilir olduğundan emin olun.
 - **Grafik Görüntülenmiyor:** Tarayıcınızı yenileyin veya JavaScript'in tarayıcınızda etkin olduğundan emin olun.
-- **Sunucu Başlatma Hatası:** Port 8000 başka bir uygulama tarafından kullanılıyor olabilir. Python komutunu farklı bir port ile çalıştırın:
+- **Sunucu Başlatma Hatası:** Port 34300 başka bir uygulama tarafından kullanılıyor olabilir. Python komutunu farklı bir port ile çalıştırın:
 
 ```bash
 python -m http.server 9000
