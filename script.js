@@ -386,7 +386,7 @@ class ChartView {
                 }
                 
                 // Animasyonlu geçiş - dokunmatik için daha uzun animasyon süresi
-                this.animateVisibleRange(newStart, newEnd, 400);
+                this.animateVisibleRange(newStart, newEnd, 4000);
             }
             
             this.lastDeltaX = 0;
@@ -924,7 +924,7 @@ class ChartView {
             d.x <= this.visibleRange.end + bufferWidth
         );
         if (bufferedData.length === 0) return;
-
+        
         // Önce grid (arka plan) çiz
         this.drawGrid();
         
@@ -1591,6 +1591,68 @@ class ChartView {
             return;
         }
         
+        // Trade Bot işlemleri için yeni çizim tipleri
+        if (drawing.type === 'botBuy' || drawing.type === 'botSell' || 
+            drawing.type === 'botTP' || drawing.type === 'botSL') {
+            
+            const x = this.dataToPixelX(drawing.time);
+            let y = this.dataToPixelY(drawing.price);
+            
+            // Mum boyutunu hesapla
+            const visibleData = this.data.filter(d => 
+                d.x >= this.visibleRange.start && d.x <= this.visibleRange.end
+            );
+            const barWidth = Math.min(
+                this.canvas.width / visibleData.length * 0.8, 
+                25
+            );
+            const finalBarWidth = Math.max(barWidth, 3);
+            
+            // Sembol boyutları
+            const symbolSize = finalBarWidth * 0.8;
+            const symbolOffset = 18;
+            
+            // Sembolün mumdan ayrılması için y koordinatını ayarla
+            if (drawing.type === 'botSell' || drawing.type === 'botSL') {
+                y -= symbolOffset;
+            } else {
+                y += symbolOffset;
+            }
+            
+            // Sembol rengi
+            this.ctx.fillStyle = (drawing.type === 'botBuy' || drawing.type === 'botTP') ? '#26a69a' : '#ef5350';
+            
+            // Sembol çizimi
+            if (drawing.type === 'botBuy' || drawing.type === 'botSell') {
+                // Daire çiz
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, symbolSize/2, 0, Math.PI * 2);
+                this.ctx.fill();
+            } else {
+                // Kare çiz
+                this.ctx.fillRect(x - symbolSize/2, y - symbolSize/2, symbolSize, symbolSize);
+            }
+            
+            // Etiket çizimi
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = `${symbolSize}px Arial`;
+            this.ctx.textAlign = 'left';
+            this.ctx.textBaseline = 'middle';
+            
+            let label = '';
+            switch(drawing.type) {
+                case 'botBuy': label = 'B'; break;
+                case 'botSell': label = 'S'; break;
+                case 'botTP': label = 'TP'; break;
+                case 'botSL': label = 'SL'; break;
+            }
+            
+            this.ctx.fillText(label, x + symbolSize, y);
+            
+            this.ctx.restore();
+            return;
+        }
+        
         // Diğer çizimler için mevcut kod
         this.ctx.strokeStyle = '#3b82f6';
         this.ctx.lineWidth = 1.5;
@@ -1739,6 +1801,156 @@ class ChartView {
         
         // Kaydırma işlemini bitir
         this.endPan();
+    }
+
+    drawBacktestChart() {
+        const canvas = document.getElementById('backtestChart');
+        const ctx = canvas.getContext('2d');
+        
+        // Canvas boyutlarını ayarla
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        // Arka planı temizle
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Veri aralığını hesapla
+        const data = this.backtestData;
+        if (!data || data.length === 0) return;
+        
+        const minPrice = Math.min(...data.map(d => d.low));
+        const maxPrice = Math.max(...data.map(d => d.high));
+        const priceRange = maxPrice - minPrice;
+        const padding = priceRange * 0.1;
+        
+        // Ölçeklendirme faktörleri
+        const xScale = canvas.width / data.length;
+        const yScale = (canvas.height - 40) / (priceRange + padding * 2);
+        
+        // Mum çizimi
+        data.forEach((candle, i) => {
+            const x = i * xScale;
+            const openY = canvas.height - 40 - (candle.open - minPrice + padding) * yScale;
+            const closeY = canvas.height - 40 - (candle.close - minPrice + padding) * yScale;
+            const highY = canvas.height - 40 - (candle.high - minPrice + padding) * yScale;
+            const lowY = canvas.height - 40 - (candle.low - minPrice + padding) * yScale;
+            
+            // Mum gövdesi
+            ctx.fillStyle = candle.close >= candle.open ? '#26a69a' : '#ef5350';
+            const bodyWidth = Math.max(xScale * 0.8, 2);
+            ctx.fillRect(x - bodyWidth/2, Math.min(openY, closeY), bodyWidth, Math.abs(closeY - openY));
+            
+            // Fitil
+            ctx.beginPath();
+            ctx.moveTo(x, highY);
+            ctx.lineTo(x, lowY);
+            ctx.strokeStyle = candle.close >= candle.open ? '#26a69a' : '#ef5350';
+            ctx.stroke();
+        });
+        
+        // Sinyal çizimi
+        if (this.backtestSignals) {
+            this.backtestSignals.forEach(signal => {
+                const x = signal.index * xScale;
+                let y = canvas.height - 40 - (signal.price - minPrice + padding) * yScale;
+                
+                // Ok boyutları
+                const arrowWidth = Math.max(xScale * 0.8, 2);
+                const arrowHeight = arrowWidth;
+                const arrowOffset = 18;
+                
+                // Okun mumdan ayrılması için y koordinatını ayarla
+                if (signal.type === 'sell') {
+                    y -= arrowOffset;
+                } else {
+                    y += arrowOffset;
+                }
+                
+                ctx.fillStyle = signal.type === 'buy' ? '#26a69a' : '#ef5350';
+                ctx.beginPath();
+                
+                if (signal.type === 'sell') {
+                    // Aşağı ok (SAT sinyali) - ▼
+                    ctx.moveTo(x, y + arrowHeight);
+                    ctx.lineTo(x - arrowWidth/2, y);
+                    ctx.lineTo(x + arrowWidth/2, y);
+                } else {
+                    // Yukarı ok (AL sinyali) - ▲
+                    ctx.moveTo(x, y - arrowHeight);
+                    ctx.lineTo(x - arrowWidth/2, y);
+                    ctx.lineTo(x + arrowWidth/2, y);
+                }
+                
+                ctx.closePath();
+                ctx.fill();
+                
+                // Ok kenarlarını çiz
+                ctx.strokeStyle = signal.type === 'buy' ? '#26a69a' : '#ef5350';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+        
+        // Trade Bot işlemleri
+        if (this.backtestTrades) {
+            this.backtestTrades.forEach(trade => {
+                const x = trade.index * xScale;
+                let y = canvas.height - 40 - (trade.price - minPrice + padding) * yScale;
+                
+                // Sembol boyutları
+                const symbolSize = Math.max(xScale * 0.8, 2) * 0.8;
+                const symbolOffset = 18;
+                
+                // Sembolün mumdan ayrılması için y koordinatını ayarla
+                if (trade.type === 'sell' || trade.type === 'stopLoss') {
+                    y -= symbolOffset;
+                } else {
+                    y += symbolOffset;
+                }
+                
+                // Sembol rengi
+                ctx.fillStyle = (trade.type === 'buy' || trade.type === 'takeProfit') ? '#26a69a' : '#ef5350';
+                
+                // Sembol çizimi
+                if (trade.type === 'buy' || trade.type === 'sell') {
+                    // Daire çiz
+                    ctx.beginPath();
+                    ctx.arc(x, y, symbolSize/2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Kare çiz
+                    ctx.fillRect(x - symbolSize/2, y - symbolSize/2, symbolSize, symbolSize);
+                }
+                
+                // Etiket çizimi
+                ctx.fillStyle = '#fff';
+                ctx.font = `${symbolSize}px Arial`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                let label = '';
+                switch(trade.type) {
+                    case 'buy': label = 'B'; break;
+                    case 'sell': label = 'S'; break;
+                    case 'takeProfit': label = 'TP'; break;
+                    case 'stopLoss': label = 'SL'; break;
+                }
+                
+                ctx.fillText(label, x + symbolSize, y);
+            });
+        }
+        
+        // Fiyat etiketleri
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        const priceStep = priceRange / 5;
+        for (let i = 0; i <= 5; i++) {
+            const price = minPrice - padding + priceStep * i;
+            const y = canvas.height - 40 - (price - minPrice + padding) * yScale;
+            ctx.fillText(price.toFixed(2), canvas.width - 5, y);
+        }
     }
 }
 
@@ -2101,12 +2313,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.createElement('div');
         modal.id = 'backtestModal';
         modal.style.background = '#181C2A';
-        modal.style.borderRadius = '12px';
+        modal.style.borderRadius = '16px';
         modal.style.boxShadow = '0 8px 32px rgba(0,0,0,0.25)';
-        modal.style.padding = '32px 32px 24px 32px';
-        modal.style.minWidth = '400px';
-        modal.style.maxWidth = '95vw';
-        modal.style.maxHeight = '90vh';
+        modal.style.padding = '40px 40px 28px 40px';
+        modal.style.minWidth = '800px';
+        modal.style.width = '1040px';
+        modal.style.maxWidth = '98vw';
+        modal.style.maxHeight = '96vh';
         modal.style.position = 'relative';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
@@ -2174,11 +2387,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Grafik
         const chartCanvas = document.createElement('canvas');
-        chartCanvas.width = 700;
-        chartCanvas.height = 350;
+        chartCanvas.width = 900;
+        chartCanvas.height = 500;
         chartCanvas.style.background = '#23263a';
-        chartCanvas.style.borderRadius = '8px';
-        chartCanvas.style.margin = '12px 0 18px 0';
+        chartCanvas.style.borderRadius = '10px';
+        chartCanvas.style.margin = '18px 0 24px 0';
         backtestPanel.appendChild(chartCanvas);
 
         // SDA butonu
@@ -2212,11 +2425,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     <option value="price-threshold">Price Threshold</option>
                 </select>
             </label>
-            <label style="color:#fff;font-size:15px;">Min Profit %: <input id="backtestMinProfit" type="number" value="1" min="0.1" max="5" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
-            <label style="color:#fff;font-size:15px;">Max Stop %: <input id="backtestMaxStop" type="number" value="1" min="0.1" max="2" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
+            <label style="color:#fff;font-size:15px;">Take Profit %: <input id="backtestMinProfit" type="number" value="1" min="0.1" max="5" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
+            <label style="color:#fff;font-size:15px;">Stop Loss %: <input id="backtestMaxStop" type="number" value="1" min="0.1" max="2" step="0.1" style="width:50px;padding:3px 6px;border-radius:3px;border:1px solid #333;"></label>
         `;
         backtestPanel.appendChild(configDiv);
 
+        // Butonları bir flex container içinde yan yana hizala
+        const buttonRow = document.createElement('div');
+        buttonRow.style.display = 'flex';
+        buttonRow.style.flexDirection = 'row';
+        buttonRow.style.gap = '10px';
+        buttonRow.style.justifyContent = 'center';
+        buttonRow.style.alignItems = 'center';
+        buttonRow.style.marginBottom = '18px';
+        backtestPanel.appendChild(buttonRow);
         // Botu Başlat butonu (başta gizli)
         const startBtn = document.createElement('button');
         startBtn.textContent = 'Botu Başlat';
@@ -2229,17 +2451,34 @@ document.addEventListener('DOMContentLoaded', () => {
         startBtn.style.fontSize = '16px';
         startBtn.style.cursor = 'pointer';
         startBtn.style.display = 'none';
-        backtestPanel.appendChild(startBtn);
+        buttonRow.appendChild(startBtn);
+        // Pause button
+        const pauseBtn = document.createElement('button');
+        pauseBtn.textContent = 'Botu Duraklat';
+        pauseBtn.style.background = '#ef5350';
+        pauseBtn.style.color = '#fff';
+        pauseBtn.style.border = 'none';
+        pauseBtn.style.borderRadius = '4px';
+        pauseBtn.style.padding = '8px 22px';
+        pauseBtn.style.fontWeight = 'bold';
+        pauseBtn.style.fontSize = '16px';
+        pauseBtn.style.cursor = 'pointer';
+        pauseBtn.style.display = 'none';
+        buttonRow.appendChild(pauseBtn);
+        // Pause button click
+        pauseBtn.addEventListener('click', function() {
+            togglePauseState(pauseBtn);
+        });
 
         // İşlem tablosu (başta gizli)
         const tableDiv = document.createElement('div');
         tableDiv.style.display = 'none';
         tableDiv.style.width = '100%';
-        tableDiv.style.maxHeight = '180px';
+        tableDiv.style.maxHeight = '260px';
         tableDiv.style.overflowY = 'auto';
         tableDiv.innerHTML = `
             <table style="width:100%;background:#23263a;color:#fff;border-radius:6px;overflow:hidden;font-size:14px;">
-                <thead><tr style="background:#222;"><th>Zaman</th><th>İşlem</th><th>Fiyat</th><th>Miktar</th><th>Güncel Bakiye</th></tr></thead>
+                <thead><tr style="background:#222;"><th>Zaman</th><th>İşlem</th><th>Fiyat</th><th>Miktar</th><th>Güncel Bakiye</th><th>PNL %</th></tr></thead>
                 <tbody id="backtestTradeTableBody"></tbody>
             </table>
         `;
@@ -2278,34 +2517,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 botActive: false,
                 interval: null
             };
+            // --- YENİ: Önizleme olarak sadece eski mumları çiz ---
+            drawBacktestChart(chartState, chartCanvas);
+            // ---
             // Basit chart çizim fonksiyonu (kutular ve sinyaller dahil)
-            function drawBacktestChart() {
-                const ctx = chartCanvas.getContext('2d');
-                ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-                if (chartState.candles.length === 0) return;
-                // Fiyat aralığı
-                const min = Math.min(...chartState.candles.map(c => c.low));
-                const max = Math.max(...chartState.candles.map(c => c.high));
-                const pricePadding = (max - min) * 0.05;
-                const priceMin = min - pricePadding;
-                const priceMax = max + pricePadding;
-                // Mumları çiz
-                chartState.candles.forEach((candle, i) => {
-                    const x = 40 + (i / (chartState.candles.length-1)) * (chartCanvas.width-80);
-                    const openY = chartCanvas.height - ((candle.open - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
-                    const closeY = chartCanvas.height - ((candle.close - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
-                    const highY = chartCanvas.height - ((candle.high - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
-                    const lowY = chartCanvas.height - ((candle.low - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
-                    // Wick
-                    ctx.strokeStyle = '#888';
-                    ctx.beginPath();
-                    ctx.moveTo(x, highY);
-                    ctx.lineTo(x, lowY);
-                    ctx.stroke();
-                    // Body
-                    ctx.strokeStyle = ctx.fillStyle = candle.close >= candle.open ? '#26a69a' : '#ef5350';
-                    ctx.fillRect(x-3, Math.min(openY, closeY), 6, Math.max(2, Math.abs(openY-closeY)));
-                });
+            
                 // Kutuları çiz
                 chartState.boxes.forEach(box => {
                     const startIdx = chartState.candles.findIndex(c => c.x === box.startTime);
@@ -2340,8 +2556,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     ctx.fill();
                     ctx.restore();
                 });
-            }
-            drawBacktestChart();
             // --- SDA Algoritması (modal için izole) ---
             function runSDA(candles) {
                 // Aynı mantıkla kutu ve sinyal üretimi (kısa, sade versiyon)
@@ -2408,53 +2622,210 @@ document.addEventListener('DOMContentLoaded', () => {
                     this.processedSignals = new Set();
                     this.hasBoughtOnce = false; // YENİ: İlk buy sinyali gelene kadar bekle
                     this.lastBox = null; // YENİ: Son SDA kutusu
+                    this.positionType = null; // 'long', 'short', null
+                    this.entryPrice = null;
+                    this.lastPrice = undefined;
                 }
-                run() {
+                // run fonksiyonu artık güncel fiyatı parametre olarak alacak
+                run(currentPrice) {
                     const data = this.getData();
                     if (!data || data.length < 50) return;
-                    const price = data[data.length-1].close;
+                    let price = currentPrice;
                     let action = null;
                     let reason = '';
-                    if (this.strategy === 'sda') {
-                        // Son aktif kutuyu bul
-                        const boxes = chartState.boxes;
-                        const lastBox = boxes.length > 0 ? boxes[boxes.length-1] : null;
-                        this.lastBox = lastBox;
-                        if (this.position === 0 && lastBox) {
-                            const lower = Math.min(lastBox.upper, lastBox.lower);
-                            const lowerTol = lower * 0.003; // %0.3 tolerans (SDA ile aynı)
-                            if (price <= lower + lowerTol && price >= lower - lowerTol) {
-                                action = 'buy';
-                                reason = 'Box Lower Touch';
-                            }
-                        } else if (this.position > 0 && this.buyPrice !== null && lastBox) {
-                            const upper = Math.max(lastBox.upper, lastBox.lower);
-                            const upperTol = upper * 0.003; // %0.3 tolerans (SDA ile aynı)
-                            if (price >= upper - upperTol && price <= upper + upperTol) {
-                                action = 'sell';
-                                reason = 'Box Upper Touch';
-                            } else if (price >= this.buyPrice * (1 + this.minProfit)) {
-                                action = 'sell';
-                                reason = 'Take Profit';
-                            } else if (price <= this.buyPrice * (1 - this.maxStop)) {
-                                action = 'sell';
-                                reason = 'Stop Loss';
-                            }
+                    const boxes = chartState.boxes;
+                    const lastBox = boxes.length > 0 ? boxes[boxes.length-1] : null;
+                    if (!lastBox) return;
+                    const lower = Math.min(lastBox.upper, lastBox.lower);
+                    const upper = Math.max(lastBox.upper, lastBox.lower);
+                    const lowerTol = lower * 0.003;
+                    const upperTol = upper * 0.003;
+                    // Pozisyon yokken
+                    if (!this.positionType) {
+                        // Box upper
+                        if (
+                            this.lastPrice !== undefined &&
+                            this.lastPrice > upper + upperTol &&
+                            price <= upper + upperTol && price >= upper - upperTol
+                        ) {
+                            // Üstten değdi: Long aç
+                            const buyAmount = this.balance / price;
+                            this.position = buyAmount;
+                            this.balance -= buyAmount * price;
+                            this.positionType = 'long';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Long Entry', price, amount: buyAmount, balance: this.balance + this.position * price, reason: 'Box Upper Touch (üstten)'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                        } else if (
+                            this.lastPrice !== undefined &&
+                            this.lastPrice < upper - upperTol &&
+                            price <= upper + upperTol && price >= upper - upperTol
+                        ) {
+                            // Alttan değdi: Short aç
+                            const sellAmount = this.balance / price;
+                            this.position = sellAmount;
+                            this.positionType = 'short';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Short Entry', price, amount: sellAmount, balance: this.balance, reason: 'Box Upper Touch (alttan)'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                        }
+                        // Box lower
+                        if (
+                            this.lastPrice !== undefined &&
+                            this.lastPrice > lower + lowerTol &&
+                            price <= lower + lowerTol && price >= lower - lowerTol
+                        ) {
+                            // Üstten değdi: Long aç
+                            const buyAmount = this.balance / price;
+                            this.position = buyAmount;
+                            this.balance -= buyAmount * price;
+                            this.positionType = 'long';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Long Entry', price, amount: buyAmount, balance: this.balance + this.position * price, reason: 'Box Lower Touch (üstten)'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                        } else if (
+                            this.lastPrice !== undefined &&
+                            this.lastPrice < lower - lowerTol &&
+                            price <= lower + lowerTol && price >= lower - lowerTol
+                        ) {
+                            // Alttan değdi: Short aç
+                            const sellAmount = this.balance / price;
+                            this.position = sellAmount;
+                            this.positionType = 'short';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Short Entry', price, amount: sellAmount, balance: this.balance, reason: 'Box Lower Touch (alttan)'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                        }
+                    } else if (this.positionType === 'long') {
+                        // Long pozisyon açıkken
+                        if (price >= this.entryPrice * (1 + this.minProfit)) {
+                            // Take Profit (Long kapat)
+                            this.balance += price * this.position;
+                            this.lastAction = {type: 'Long TP', price, amount: this.position, balance: this.balance, reason: 'Take Profit'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                        } else if (price <= this.entryPrice * (1 - this.maxStop)) {
+                            // Stop Loss (Long kapat)
+                            const slPrice = this.entryPrice * (1 - this.maxStop);
+                            this.balance += slPrice * this.position;
+                            this.lastAction = {type: 'Long SL', price: slPrice, amount: this.position, balance: this.balance, reason: 'Stop Loss'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                        }
+                        // Zıt sinyal: short açma sinyali (alttan değdi)
+                        let shortEntry = false;
+                        if (
+                            this.lastPrice !== undefined &&
+                            (
+                                // Box upper alttan değdi
+                                (this.lastPrice < upper - upperTol && price <= upper + upperTol && price >= upper - upperTol) ||
+                                // Box lower alttan değdi
+                                (this.lastPrice < lower - lowerTol && price <= lower + lowerTol && price >= lower - lowerTol)
+                            )
+                        ) {
+                            shortEntry = true;
+                        }
+                        if (shortEntry) {
+                            // 1. Long pozisyonu kapat (anlık fiyatla)
+                            this.balance += price * this.position;
+                            this.lastAction = {type: 'Long Close (Zıt Sinyal)', price, amount: this.position, balance: this.balance, reason: 'Zıt Sinyal'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                            // 2. Short pozisyonu aç
+                            const sellAmount = this.balance / price;
+                            this.position = sellAmount;
+                            this.positionType = 'short';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Short Entry', price, amount: sellAmount, balance: this.balance, reason: 'Zıt Sinyal ile Açıldı'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            return;
+                        }
+                    } else if (this.positionType === 'short') {
+                        // Short pozisyon açıkken
+                        if (price <= this.entryPrice * (1 - this.minProfit)) {
+                            // Take Profit (Short kapat)
+                            const pnl = (this.entryPrice - price) * this.position;
+                            this.balance += pnl;
+                            this.lastAction = {type: 'Short TP', price, amount: this.position, balance: this.balance, reason: 'Take Profit'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                        } else if (price >= this.entryPrice * (1 + this.maxStop)) {
+                            // Stop Loss (Short kapat)
+                            const slPrice = this.entryPrice * (1 + this.maxStop);
+                            const pnl = (this.entryPrice - slPrice) * this.position;
+                            this.balance += pnl;
+                            this.lastAction = {type: 'Short SL', price: slPrice, amount: this.position, balance: this.balance, reason: 'Stop Loss'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                        }
+                        // Zıt sinyal: long açma sinyali (üstten değdi)
+                        let longEntry = false;
+                        if (
+                            this.lastPrice !== undefined &&
+                            (
+                                // Box upper üstten değdi
+                                (this.lastPrice > upper + upperTol && price <= upper + upperTol && price >= upper - upperTol) ||
+                                // Box lower üstten değdi
+                                (this.lastPrice > lower + lowerTol && price <= lower + lowerTol && price >= lower - lowerTol)
+                            )
+                        ) {
+                            longEntry = true;
+                        }
+                        if (longEntry) {
+                            // 1. Short pozisyonu kapat (anlık fiyatla)
+                            const pnl = (this.entryPrice - price) * this.position;
+                            this.balance += pnl;
+                            this.lastAction = {type: 'Short Close (Zıt Sinyal)', price, amount: this.position, balance: this.balance, reason: 'Zıt Sinyal'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            this.position = 0;
+                            this.positionType = null;
+                            this.entryPrice = null;
+                            // 2. Long pozisyonu aç
+                            const buyAmount = this.balance / price;
+                            this.position = buyAmount;
+                            this.balance -= buyAmount * price;
+                            this.positionType = 'long';
+                            this.entryPrice = price;
+                            this.lastAction = {type: 'Long Entry', price, amount: buyAmount, balance: this.balance + this.position * price, reason: 'Zıt Sinyal ile Açıldı'};
+                            this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
+                            return;
                         }
                     }
-                    // Diğer stratejilerde işlem yapma
-                    if (action === 'buy') {
-                        this.position += 1;
-                        this.balance -= price;
-                        this.buyPrice = price;
-                        this.lastAction = {type: 'Al', price, amount: 1, balance: this.balance + this.position * price, reason};
-                        this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
-                    } else if (action === 'sell') {
-                        this.balance += price * this.position;
-                        this.lastAction = {type: 'Sat', price, amount: this.position, balance: this.balance, reason};
-                        this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
-                        this.position = 0;
-                        this.buyPrice = null;
+                    this.lastPrice = price;
+                    // Trade işlemi gerçekleştiğinde sembolü ekle
+                    if (action === 'buy' || action === 'sell') {
+                        // En yakın mumu bul
+                        let minDiff = Infinity;
+                        let idx = -1;
+                        for (let i = 0; i < data.length; i++) {
+                            const diff = Math.abs(data[i].close - price);
+                            if (diff < minDiff) {
+                                minDiff = diff;
+                                idx = i;
+                            }
+                        }
+                        if (idx !== -1 && chartState && Array.isArray(chartState.trades)) {
+                            let type = '';
+                            if (action === 'buy') type = 'buy';
+                            if (action === 'sell' && reason === 'Take Profit') type = 'takeProfit';
+                            else if (action === 'sell' && reason === 'Stop Loss') type = 'stopLoss';
+                            else if (action === 'sell') type = 'sell';
+                            chartState.trades.push({
+                                type,
+                                index: idx,
+                                price
+                            });
+                        }
                     }
                 }
             }
@@ -2464,7 +2835,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const { boxes, signals } = runSDA(chartState.candles);
                 chartState.boxes = boxes;
                 chartState.signals = signals;
-                drawBacktestChart();
+                drawBacktestChart(chartState, chartCanvas);
                 sdaBtn.style.display = 'none';
                 configDiv.style.display = 'flex';
                 startBtn.style.display = 'inline-block';
@@ -2474,6 +2845,13 @@ document.addEventListener('DOMContentLoaded', () => {
             startBtn.onclick = () => {
                 if (chartState.botActive) return;
                 chartState.botActive = true;
+                startBtn.style.backgroundColor = '#666';
+                startBtn.textContent = 'Bot Çalışıyor';
+                startBtn.disabled = true;
+                pauseBtn.style.display = 'inline-block';
+                pauseBtn.textContent = 'Botu Duraklat';
+                pauseBtn.style.backgroundColor = '#ef5350';
+                isPaused = false;
                 // Update button appearance
                 startBtn.style.backgroundColor = '#666';
                 startBtn.textContent = 'Bot Çalışıyor';
@@ -2488,25 +2866,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 chartState.bot = new ModalTradeBot(() => chartState.candles, trade => {
                     // İşlem tablosuna ekle
-                    const tbody = document.getElementById('backtestTradeTableBody');
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>`;
-                    tbody.appendChild(row);
+                    appendBacktestTradeRow(trade);
                 }, config);
                 // Zincirleme animasyon başlat
                 function animateNextCandle() {
                     if (chartState.toAdd.length === 0) return;
+                    if (isPaused) {
+                        setTimeout(animateNextCandle, 500); // Paused: tekrar dene
+                        return;
+                    }
                     const nextCandle = chartState.toAdd.shift();
-                    animateCandle(chartState, chartCanvas, nextCandle, 4000, (animState) => {
+                    animateCandle(chartState, chartCanvas, nextCandle, 5000, (animState) => {
                         chartState.candles.push(nextCandle);
-                        // SDA ve sinyalleri güncelle
+                        if (chartState.candles.length > 100) {
+                            chartState.candles.shift();
+                        }
                         const { boxes, signals } = runSDA(chartState.candles);
                         chartState.boxes = boxes;
                         chartState.signals = signals;
-                        // Botu çalıştır
                         chartState.bot.run();
                         drawBacktestChart(chartState, chartCanvas);
-                        setTimeout(animateNextCandle, 1000); // 1 sn bekle, sonra sıradaki muma geç
+                        setTimeout(animateNextCandle, 1000);
                     }, drawBacktestChart);
                 }
                 animateNextCandle();
@@ -2527,7 +2907,7 @@ document.addEventListener('DOMContentLoaded', () => {
         backtestBtn.addEventListener('click', () => {
             modalOverlay.style.display = 'flex';
         });
-    }
+    };
     // --- BACKTEST BUTONU SONU ---
 
     if (tradingviewBtn) {
@@ -2629,6 +3009,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const row = document.createElement('tr');
         row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>`;
         table.appendChild(row);
+        
         // Alış fiyatı ve tahmini satış fiyatı kutularını güncelle
         if (trade.type === 'Al') {
             buyPriceInput.value = trade.price.toFixed(2);
@@ -2639,6 +3020,49 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (trade.type === 'Sat') {
             buyPriceInput.value = '';
             targetSellPriceInput.value = '';
+        }
+        
+        // Grafikte işlemi göster
+        if (window.chartView) {
+            let drawingType = '';
+            switch(trade.type) {
+                case 'Al':
+                    drawingType = 'botBuy';
+                    break;
+                case 'Sat':
+                    if (trade.reason === 'Take Profit') {
+                        drawingType = 'botTP';
+                    } else if (trade.reason === 'Stop Loss') {
+                        drawingType = 'botSL';
+                    } else {
+                        drawingType = 'botSell';
+                    }
+                    break;
+            }
+            
+            if (drawingType) {
+                // En yakın mumu bul
+                let candleTime = null;
+                if (window.chartView.data && window.chartView.data.length > 0) {
+                    let minDiff = Infinity;
+                    for (const candle of window.chartView.data) {
+                        const diff = Math.abs(candle.close - trade.price);
+                        if (diff < minDiff) {
+                            minDiff = diff;
+                            candleTime = candle.x;
+                        }
+                    }
+                }
+                if (candleTime) {
+                    window.chartView.drawings.push({
+                        type: drawingType,
+                        time: candleTime,
+                        price: trade.price,
+                        color: drawingType === 'botBuy' || drawingType === 'botTP' ? '#26a69a' : '#ef5350'
+                    });
+                    window.chartView.drawChart();
+                }
+            }
         }
     }
 
@@ -2683,6 +3107,9 @@ class TradeBot {
         this.buyPrice = null; // Son alış fiyatı
         this.hasBoughtOnce = false; // YENİ: İlk buy sinyali gelene kadar bekle
         this.lastBox = null; // YENİ: Son SDA kutusu
+        this.positionType = null; // 'long', 'short', null
+        this.entryPrice = null;
+        this.lastPrice = undefined;
     }
     start(balance, strategy, minProfit, maxStop) {
         this.balance = Number(balance) || 10000;
@@ -2743,18 +3170,28 @@ class TradeBot {
         }
         // Diğer stratejilerde işlem yapma
         if (action === 'buy') {
-            this.position += this.tradeSize;
-            this.balance -= price * this.tradeSize;
+            // Alınan miktarı doğru hesapla
+            const buyAmount = this.balance / price;
+            this.position += buyAmount;
+            this.balance -= buyAmount * price;
             this.buyPrice = price;
-            this.lastAction = {type: 'Al', price, amount: this.tradeSize, balance: this.balance + this.position * price, reason};
+            this.lastAction = {type: 'Al', price, amount: buyAmount, balance: this.balance + this.position * price, reason};
             this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
         } else if (action === 'sell') {
-            this.balance += price * this.position;
-            this.lastAction = {type: 'Sat', price, amount: this.position, balance: this.balance, reason};
+            // Satış miktarı mevcut pozisyon olmalı
+            const sellAmount = this.position;
+            let sellPrice = price;
+            // Stop loss ise, satış fiyatını buyPrice * (1 - maxStop) olarak ayarla
+            if (reason === 'Stop Loss' && this.buyPrice != null) {
+                sellPrice = this.buyPrice * (1 - this.maxStop);
+            }
+            this.balance += sellPrice * sellAmount;
+            this.lastAction = {type: 'Sat', price: sellPrice, amount: sellAmount, balance: this.balance, reason};
             this.onTrade({...this.lastAction, time: new Date().toLocaleString()});
             this.position = 0;
             this.buyPrice = null;
         }
+        this.lastPrice = price;
     }
 }
 
@@ -2877,44 +3314,278 @@ document.addEventListener('DOMContentLoaded', () => {
 function animateCandle(chartState, chartCanvas, candle, duration, onComplete, drawChartFn) {
     const candles = chartState.candles;
     const i = candles.length;
-    const min = Math.min(...candles.map(c => c.low), candle.low);
-    const max = Math.max(...candles.map(c => c.high), candle.high);
-    const pricePadding = (max - min) * 0.05;
-    const priceMin = min - pricePadding;
-    const priceMax = max + pricePadding;
-    const x = 40 + (i / (candles.length + 1 - 1)) * (chartCanvas.width-80);
     const start = performance.now();
+    const STAGE_DURATION = 1000; // 1 saniye
     function step(now) {
         const elapsed = now - start;
-        let t = Math.min(elapsed / duration, 1);
-        let currentPrice = candle.open;
-        let highSoFar = candle.open;
-        let lowSoFar = candle.open;
-        if (t < 0.4) {
-            const t1 = t / 0.4;
-            highSoFar = candle.open + (candle.high - candle.open) * t1;
-            lowSoFar = candle.open + (candle.low - candle.open) * t1;
-            currentPrice = candle.open + (candle.close - candle.open) * t * 0.5;
-        } else {
-            const t2 = (t - 0.4) / 0.6;
-            highSoFar = candle.high;
-            lowSoFar = candle.low;
-            currentPrice = candle.open + (candle.close - candle.open) * t;
+        let stage = 0;
+        if (elapsed < STAGE_DURATION) stage = 0;
+        else if (elapsed < 2 * STAGE_DURATION) stage = 1;
+        else if (elapsed < 3 * STAGE_DURATION) stage = 2;
+        else stage = 3;
+        let open = candle.open, high = candle.high, low = candle.low, close = candle.close;
+        if (stage === 0) {
+            // 1. saniye: OHLC = open
+            high = open; low = open; close = open;
+        } else if (stage === 1) {
+            // 2. saniye: O=open, H=high, L=low, C=low (LOW animasyonu)
+            // high ve low gerçek, close=low
+            close = low;
+        } else if (stage === 2) {
+            // 3. saniye: O=open, H=high, L=low, C=high (HIGH animasyonu)
+            // high ve low gerçek, close=high
+            close = high;
+        } // stage 3: hepsi gerçek
+        let anim = { ...candle, stage, open, low, high, close };
+        if (drawChartFn) drawChartFn(chartState, chartCanvas, anim);
+        if (chartState.bot && typeof chartState.bot.run === 'function') {
+            chartState.bot.run(close);
         }
-        // Animasyonlu mumu parametre olarak çizdir
-        if (drawChartFn) {
-            drawChartFn(chartState, chartCanvas, {
-                ...candle,
-                currentPrice,
-                highSoFar,
-                lowSoFar
-            });
-        }
-        if (t < 1) {
+        if (stage < 3) {
             requestAnimationFrame(step);
         } else {
             onComplete && onComplete();
         }
     }
     requestAnimationFrame(step);
+}
+
+// --- drawBacktestChart fonksiyonu ---
+function drawBacktestChart(chartState, chartCanvas, animCandle) {
+    const ctx = chartCanvas.getContext('2d');
+    ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+    if (chartState.candles.length === 0) return;
+    const min = Math.min(...chartState.candles.map(c => c.low), animCandle ? animCandle.low : Infinity);
+    const max = Math.max(...chartState.candles.map(c => c.high), animCandle ? animCandle.high : -Infinity);
+    const pricePadding = (max - min) * 0.05;
+    const priceMin = min - pricePadding;
+    const priceMax = max + pricePadding;
+    // Normal mumları çiz
+    chartState.candles.forEach((candle, i) => {
+        const x = 40 + (i / (chartState.candles.length + (animCandle ? 1 : 0) - 1)) * (chartCanvas.width-80);
+        const openY = chartCanvas.height - ((candle.open - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const closeY = chartCanvas.height - ((candle.close - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const highY = chartCanvas.height - ((candle.high - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const lowY = chartCanvas.height - ((candle.low - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        ctx.strokeStyle = '#888';
+        ctx.beginPath();
+        ctx.moveTo(x, highY);
+        ctx.lineTo(x, lowY);
+        ctx.stroke();
+        ctx.strokeStyle = ctx.fillStyle = candle.close >= candle.open ? '#26a69a' : '#ef5350';
+        ctx.fillRect(x-3, Math.min(openY, closeY), 6, Math.max(2, Math.abs(openY-closeY)));
+    });
+    // Animasyonlu mumu çiz
+    if (animCandle) {
+        const i = chartState.candles.length;
+        const x = 40 + (i / (chartState.candles.length + 1 - 1)) * (chartCanvas.width-80);
+
+        // Her aşama için OHLC değerlerini belirle
+        let open = animCandle.open;
+        let high = open, low = open, close = open;
+        let label = '', price = '';
+        if (animCandle.stage === 0) {
+            // 1. saniye: OHLC = open
+            label = 'OPEN'; price = open;
+        } else if (animCandle.stage === 1) {
+            // 2. saniye: O=open, H=high, L=open, C=high
+            high = animCandle.high;
+            close = animCandle.high;
+            label = 'HIGH'; price = high;
+        } else if (animCandle.stage === 2) {
+            // 3. saniye: O=open, H=high, L=low, C=low
+            high = animCandle.high;
+            low = animCandle.low;
+            close = animCandle.low;
+            label = 'LOW'; price = low;
+        } else if (animCandle.stage === 3) {
+            // 4. saniye: O=open, H=high, L=low, C=close
+            high = animCandle.high;
+            low = animCandle.low;
+            close = animCandle.close;
+            label = 'CLOSE'; price = close;
+        }
+
+        const openY = chartCanvas.height - ((open - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const highY = chartCanvas.height - ((high - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const lowY = chartCanvas.height - ((low - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const closeY = chartCanvas.height - ((close - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+
+        // Renk: close >= open ise yeşil, değilse kırmızı
+        const color = close >= open ? '#26a69a' : '#ef5350';
+
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 3;
+
+        // Fitil (high-low)
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, highY);
+        ctx.lineTo(x, lowY);
+        ctx.stroke();
+
+        // Gövde
+        ctx.fillStyle = color;
+        ctx.fillRect(x-6, Math.min(openY, closeY), 12, Math.max(2, Math.abs(openY-closeY)));
+
+        // Kenar çizgisi kaldırıldı
+        // ctx.strokeStyle = '#FFD700';
+        // ctx.lineWidth = 2;
+        // ctx.strokeRect(x-6, Math.min(openY, closeY), 12, Math.max(2, Math.abs(openY-closeY)));
+
+        // Aşama etiketi ve fiyat kaldırıldı
+        // ctx.font = 'bold 13px sans-serif';
+        // ctx.fillStyle = '#FFD700';
+        // ctx.fillText(`${label}: $${price}`, x + 15, openY);
+        ctx.restore();
+    }
+    // Kutuları ve sinyalleri çiz (değiştirilmedi)
+    chartState.boxes.forEach(box => {
+        const startIdx = chartState.candles.findIndex(c => c.x === box.startTime);
+        const endIdx = chartState.candles.findIndex(c => c.x === box.endTime);
+        if (startIdx === -1 || endIdx === -1) return;
+        const x1 = 40 + (startIdx / (chartState.candles.length + (animCandle ? 1 : 0) - 1)) * (chartCanvas.width-80);
+        const x2 = 40 + (endIdx / (chartState.candles.length + (animCandle ? 1 : 0) - 1)) * (chartCanvas.width-80);
+        const y1 = chartCanvas.height - ((box.upper - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        const y2 = chartCanvas.height - ((box.lower - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        ctx.save();
+        ctx.strokeStyle = box.status === 'completed' ? '#888' : '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+        ctx.restore();
+    });
+    chartState.signals.forEach(sig => {
+        const idx = chartState.candles.findIndex(c => c.x === sig.time);
+        if (idx === -1) return;
+        const x = 40 + (idx / (chartState.candles.length + (animCandle ? 1 : 0) - 1)) * (chartCanvas.width-80);
+        const y = chartCanvas.height - ((sig.price - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        ctx.save();
+        ctx.fillStyle = sig.type === 'buySignal' ? '#26a69a' : '#ef5350';
+        ctx.beginPath();
+        if (sig.type === 'buySignal') {
+            ctx.moveTo(x, y-12); ctx.lineTo(x-7, y+7); ctx.lineTo(x+7, y+7);
+        } else {
+            ctx.moveTo(x, y+12); ctx.lineTo(x-7, y-7); ctx.lineTo(x+7, y-7);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // Güncel fiyat etiketi (animCandle varsa onun, yoksa son mumun close'u)
+    let priceToShow, yToShow, colorToShow;
+    if (animCandle) {
+        // Her adımda animCandle'ın güncel close'u
+        let open = animCandle.open;
+        let high = open, low = open, close = open;
+        if (animCandle.stage === 1) { high = animCandle.high; close = animCandle.high; }
+        else if (animCandle.stage === 2) { high = animCandle.high; low = animCandle.low; close = animCandle.low; }
+        else if (animCandle.stage === 3) { high = animCandle.high; low = animCandle.low; close = animCandle.close; }
+        priceToShow = close;
+        yToShow = chartCanvas.height - ((close - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        colorToShow = close >= open ? '#26a69a' : '#ef5350';
+    } else {
+        // Son mumun close'u
+        const lastCandle = chartState.candles[chartState.candles.length - 1];
+        priceToShow = lastCandle.close;
+        yToShow = chartCanvas.height - ((priceToShow - priceMin) / (priceMax - priceMin) * (chartCanvas.height-40)) - 20;
+        colorToShow = lastCandle.close >= lastCandle.open ? '#26a69a' : '#ef5350';
+    }
+
+    // Fiyat kutusu çiz
+    const text = priceToShow.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    ctx.save();
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell';
+    const textWidth = ctx.measureText(text).width;
+    const boxWidth = textWidth + 18;
+    const boxHeight = 26;
+    const boxX = 8;
+    const boxY = yToShow - boxHeight / 2;
+
+    // Arka plan kutusu
+    ctx.fillStyle = '#181C2A';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+
+    // Fiyat yazısı
+    ctx.fillStyle = colorToShow;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, boxX + boxWidth / 2, boxY + boxHeight / 2);
+    ctx.restore();
+}
+// ... existing code ...
+
+// Backtest modal trade table row coloring
+let lastBacktestBalance = null;
+let lastEntryPrice = null;
+let lastPositionType = null;
+function appendBacktestTradeRow(trade) {
+    const tbody = document.getElementById('backtestTradeTableBody');
+    const row = document.createElement('tr');
+    // PNL hesaplama
+    let pnlCell = '';
+    let pnlValue = null;
+    let isExit = false;
+    if (trade.type === 'Long TP' || trade.type === 'Long SL' || trade.type === 'Long Close (Zıt Sinyal)') {
+        // Long pozisyon kapandı
+        if (lastEntryPrice) {
+            pnlValue = ((trade.price - lastEntryPrice) / lastEntryPrice) * 100;
+            isExit = true;
+        }
+    } else if (trade.type === 'Short TP' || trade.type === 'Short SL' || trade.type === 'Short Close (Zıt Sinyal)') {
+        // Short pozisyon kapandı
+        if (lastEntryPrice) {
+            pnlValue = ((lastEntryPrice - trade.price) / lastEntryPrice) * 100;
+            isExit = true;
+        }
+    }
+    if (isExit && pnlValue !== null) {
+        const pnlClass = pnlValue >= 0 ? 'pnl-positive' : 'pnl-negative';
+        const sign = pnlValue > 0 ? '+' : '';
+        pnlCell = `<td class="${pnlClass}">${sign}${pnlValue.toFixed(2)}%</td>`;
+    } else {
+        pnlCell = '<td></td>';
+    }
+    // Satır oluştur
+    row.innerHTML = `<td>${trade.time}</td><td>${trade.type}${trade.reason ? ' ('+trade.reason+')' : ''}</td><td>${trade.price.toFixed(2)}</td><td>${trade.type === 'Al' ? (trade.balance / trade.price).toFixed(6) : trade.amount}</td><td>${trade.balance.toFixed(2)}</td>${pnlCell}`;
+    // Sadece backtest modal: color row by profit/loss
+    if (lastBacktestBalance !== null) {
+        if (trade.balance > lastBacktestBalance) {
+            row.classList.add('profit');
+        } else if (trade.balance < lastBacktestBalance) {
+            row.classList.add('loss');
+        }
+    }
+    lastBacktestBalance = trade.balance;
+    // Pozisyon açılış fiyatını güncelle
+    if (trade.type === 'Long Entry') {
+        lastEntryPrice = trade.price;
+        lastPositionType = 'long';
+    } else if (trade.type === 'Short Entry') {
+        lastEntryPrice = trade.price;
+        lastPositionType = 'short';
+    } else if (isExit) {
+        lastEntryPrice = null;
+        lastPositionType = null;
+    }
+    tbody.appendChild(row);
+}
+// ... existing code ...
+
+// Backtest modal: Pause/Resume logic
+let isPaused = false;
+function togglePauseState(pauseBtn) {
+    isPaused = !isPaused;
+    if (isPaused) {
+        pauseBtn.textContent = 'Botu Devam Ettir';
+        pauseBtn.style.backgroundColor = '#22c55e';
+    } else {
+        pauseBtn.textContent = 'Botu Duraklat';
+        pauseBtn.style.backgroundColor = '#ef5350';
+    }
 }

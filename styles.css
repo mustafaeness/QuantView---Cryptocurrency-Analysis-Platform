@@ -527,4 +527,27 @@ canvas:active {
     background: #333;
     color: #999;
     cursor: not-allowed;
-} 
+}
+
+#backtestTradeTableBody tr.profit { background: #143d27 !important; }
+#backtestTradeTableBody tr.loss { background: #3d1414 !important; }
+
+#backtestTradeTableBody td, #backtestTradeTableBody th {
+  border-right: 1px solid rgba(255,255,255,0.1);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+#backtestTradeTableBody td:last-child, #backtestTradeTableBody th:last-child {
+  border-right: none;
+}
+#backtestTradeTableBody th {
+  background: #222;
+  font-weight: bold;
+  font-size: 13px;
+}
+#backtestTradeTableBody tr:nth-child(even) {
+  background: #23263a;
+}
+
+.pnl-positive { color: #00ff00; font-weight: bold; }
+.pnl-negative { color: #ff4d4d; font-weight: bold; } 
