@@ -1,11 +1,50 @@
 # ChartView - Kripto Para Analiz Platformu
 
-ChartView, kripto para birimlerinin fiyat grafiklerini görüntüleyen ve analiz eden basit bir web uygulamasıdır. TradingView benzeri bir arayüz sunarak, kullanıcıların kripto para piyasasını takip etmelerini sağlar.
+Bu proje, kripto para birimlerinin fiyat verilerini çekmek, grafiklerini oluşturmak ve teknik analiz yapmak için tasarlanmış bir web uygulamasıdır. Kullanıcılar, farklı zaman dilimlerinde grafikleri görüntüleyebilir, alım-satım sinyalleri alabilir ve backtest yapabilirler.
 
-## Özellikler
+## Modül Listesi ve Açıklamaları
 
-- Kripto para fiyat grafikleri
-- Farklı zaman dilimlerinde görüntüleme (1s, 4s, 1g, 1h, 1a)
+### Ana Grafik Modülü
+- **CryptoData**: Kripto para birimlerinin fiyat verilerini çeker ve günceller.
+- **ChartView**: Grafikleri oluşturur ve kullanıcı etkileşimlerini yönetir.
+
+### SDA Algoritması
+- **TechnicalAnalysis**: Teknik analiz yapar ve alım-satım sinyalleri üretir.
+
+### Trade Bot Modülü
+- **TradeBot**: Alım-satım stratejilerini uygular ve işlemleri yönetir.
+
+### Backtest Modülü
+- **Backtest**: Geçmiş veriler üzerinde stratejileri test eder ve sonuçları gösterir.
+
+## Geliştirici Notları
+
+### Canvas Ölçekleme Ayarları
+- Grafikler, kullanıcı etkileşimlerine göre otomatik olarak ölçeklenir.
+
+### SDA Algoritma Sınırları
+- Cutoff box ve signal repainting yoktur.
+- Performans optimizasyonları yapılmıştır.
+
+### Genişletilebilir Modül Sistemi
+- Modüler JavaScript yapısı ile yeni özellikler eklenebilir.
+
+## Özelleştirme ve Parametreler
+
+### Bot Parametreleri
+- **MinProfit**: Minimum kâr hedefi.
+- **MaxStop**: Maksimum zarar durdurma seviyesi.
+- **Tolerans**: Sinyal toleransı.
+
+### Zaman Periyodu Seçimi
+- Kullanıcılar farklı zaman dilimlerini seçebilir.
+
+### Sinyal Davranışı
+- **Buy-Sell**: Alım ve satım sinyalleri.
+- **TP-SL Tetikleme Mantığı**: Kâr alma ve zarar durdurma seviyeleri.
+
+## Haberler
+
 - Kripto para haberleri (API key gerektirmeden)
 - Dört ana kategori altında haberler:
   - Bitcoin
@@ -50,10 +89,7 @@ python -m SimpleHTTPServer 34300
 ```
 
 4. Web tarayıcınızı açın ve aşağıdaki adresi ziyaret edin:
-
-```
 http://localhost:34300
-```
 
 ## Kullanım
 
@@ -113,4 +149,4 @@ Bu proje geliştirmeye açıktır. Katkıda bulunmak için:
 
 ## Lisans
 
-Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır. 
+Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
