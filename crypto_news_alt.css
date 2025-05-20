@@ -1,0 +1,370 @@
+/* Değişkenler */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --accent-color: #e74c3c;
+    --background-color: #f5f6fa;
+    --text-color: #2c3e50;
+    --card-background: #ffffff;
+    --border-color: #dcdde1;
+    --success-color: #2ecc71;
+    --warning-color: #f1c40f;
+    --danger-color: #e74c3c;
+    --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    --transition: all 0.3s ease;
+}
+
+/* Genel Stiller */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+/* Header */
+.header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow);
+}
+
+.header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.refresh-button, .back-button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: var(--transition);
+}
+
+.refresh-button:hover, .back-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.refresh-button i, .back-button i {
+    font-size: 1.2rem;
+}
+
+/* Kategori Filtreleme */
+.category-filter {
+    background-color: var(--card-background);
+    padding: 1rem;
+    margin: 1rem;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.category-filter select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+/* Haber Kartları */
+.news-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.news-card {
+    background-color: var(--card-background);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+}
+
+.news-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.news-image {
+    height: 200px;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.news-image.bitcoin {
+    background-color: #f7931a;
+}
+
+.news-image.ethereum {
+    background-color: #627eea;
+}
+
+.news-image.bnb {
+    background-color: #f3ba2f;
+}
+
+.news-image.market {
+    background-color: #2c3e50;
+}
+
+.news-header {
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.source, .date {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.news-content {
+    padding: 1rem;
+}
+
+.category-tag {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.category-tag.bitcoin {
+    background-color: #f7931a;
+    color: white;
+}
+
+.category-tag.ethereum {
+    background-color: #627eea;
+    color: white;
+}
+
+.category-tag.bnb {
+    background-color: #f3ba2f;
+    color: white;
+}
+
+.category-tag.market {
+    background-color: #2c3e50;
+    color: white;
+}
+
+.news-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+}
+
+.news-description {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 1rem;
+}
+
+.news-link {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: var(--secondary-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.news-link:hover {
+    background-color: #2980b9;
+}
+
+/* Duygu Analizi */
+.sentiment-analysis {
+    background-color: var(--card-background);
+    padding: 1rem;
+    margin: 1rem;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.sentiment-analysis h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.sentiment-chart {
+    width: 100%;
+    height: 200px;
+    margin-bottom: 1rem;
+}
+
+.sentiment-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.sentiment-button {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.sentiment-button.positive {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.sentiment-button.neutral {
+    background-color: var(--warning-color);
+    color: white;
+}
+
+.sentiment-button.negative {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+/* Kaynaklar */
+.resources {
+    background-color: var(--card-background);
+    padding: 1rem;
+    margin: 1rem;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+}
+
+.resources h2 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.resource-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.resource-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--background-color);
+    border-radius: 4px;
+    text-decoration: none;
+    color: var(--text-color);
+    transition: var(--transition);
+}
+
+.resource-link:hover {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+/* Loading ve Error */
+.loading, .error {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+}
+
+.loading i, .error i {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.loading {
+    color: var(--secondary-color);
+}
+
+.error {
+    color: var(--danger-color);
+}
+
+/* Responsive Tasarım */
+@media (max-width: 768px) {
+    .news-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .header-buttons {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .sentiment-buttons {
+        flex-direction: column;
+    }
+    
+    .resource-links {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Animasyonlar */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.refreshing i {
+    animation: spin 1s linear infinite;
+}
+
+/* Özel Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--background-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #2980b9;
+} 
