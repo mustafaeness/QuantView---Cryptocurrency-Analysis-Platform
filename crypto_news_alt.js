@@ -7,7 +7,7 @@ let newsAnalyses = new Map(); // Haber analizlerini ve durumlarını saklamak i�
 const activeFetches = new Set(); // Aktif olarak çekilen analizlerin ID'lerini tutar
 
 // OpenRouter API için sabitler
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_MODEL = "mistralai/mistral-7b-instruct";
 
 // Kategoriler
@@ -19,7 +19,7 @@ const CATEGORIES = {
 };
 
 // GNews API için sabitler
-const GNEWS_API_KEY = "39fb606e246a7700b22e90004821801a";
+const GNEWS_API_KEY = "fd794ca9499b9ddcaae53e27892b65ff";
 const GNEWS_API_BASE_URL = "https://gnews.io/api/v4";
 
 // Yeni: Kategori anahtarlarına göre görsel URL'leri (Bunlar genel görseller olarak kalabilir)
@@ -277,7 +277,6 @@ function createNewsCard(newsItem) {
     // Başlık
     const titleElement = document.createElement('h3');
     titleElement.className = 'news-title'; // Başlık için CSS sınıfı
-    titleElement.style.color = 'cornflowerblue'; // İSTEK 1: Başlık rengi
     const titleLink = document.createElement('a');
     titleLink.href = newsItem.url;
     titleLink.textContent = newsItem.title;
@@ -295,10 +294,10 @@ function createNewsCard(newsItem) {
     const metaInfo = document.createElement('div');
     metaInfo.className = 'news-meta'; // Meta bilgi için CSS sınıfı
     
-    const sourceSpan = document.createElement('span');
-    sourceSpan.className = 'news-source';
-    sourceSpan.textContent = `Kaynak: ${newsItem.source.name}`;
-    metaInfo.appendChild(sourceSpan);
+    // const sourceSpan = document.createElement('span');
+    // sourceSpan.className = 'news-source';
+    // sourceSpan.textContent = `Kaynak: ${newsItem.source.name}`;
+    // metaInfo.appendChild(sourceSpan);
 
     const dateSpan = document.createElement('span');
     dateSpan.className = 'news-date';

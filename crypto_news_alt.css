@@ -182,6 +182,10 @@ body {
     color: var(--text-color);
 }
 
+.news-title a {
+    color: #fff;
+}
+
 .news-description {
     font-size: 0.9rem;
     color: #666;
