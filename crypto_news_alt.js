@@ -7,7 +7,7 @@ let newsAnalyses = new Map(); // Haber analizlerini ve durumlarını saklamak i�
 const activeFetches = new Set(); // Aktif olarak çekilen analizlerin ID'lerini tutar
 
 // OpenRouter API için sabitler
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 const OPENROUTER_MODEL = "mistralai/mistral-7b-instruct";
 
 // Kategoriler
@@ -577,6 +577,8 @@ async function analyzeNewsWithOpenRouter(newsItem) {
     // ÖRNEK VERMELİ YENİ PROMPT
     const prompt = `Sen profesyonel bir kripto para analistisin. Görevin, verilen haber başlığını ve ilgili kripto varlığı analiz ederek, belirtilen formatta kısa ve öz bir değerlendirme sunmaktır. Cevabın tamamen profesyonel, teknik, analitik olmalı ve spekülatif veya abartılı yorumlardan kaçınmalısın. Yanıtların kısa, net ve Türkçe olmalı. Kesinlikle format dışına çıkma.
 
+ÖNCELİKLE YATIRIM YAPILABİLİRLİK SKORUNU, ARDINDAN YORUMUNU BELİRT. Skor 0 ile 10 arasında bir tam sayı olmalıdır.
+
 İşte senden beklediğim format ve bir örnek:
 
 Input Örneği:
@@ -584,16 +586,15 @@ Haber Başlığı: "Dev Banka, Spot Bitcoin ETF İçin SEC'e Başvurdu"
 Kripto Varlık: Bitcoin
 
 Output Örneği (Bu formata birebir uymalısın):
+Yatırım Yapılabilirlik Skoru: 8
 Yorum: Bu başvuru, Bitcoin'e yönelik kurumsal ilginin arttığını gösteriyor ve düzenleyici onay alırsa piyasaya önemli bir likidite sağlayabilir. Olumlu bir gelişme olarak değerlendirilebilir.
-Yatırım Yapılabilirlik skoru : 8
 
 Şimdi senin sıran. Aşağıdaki bilgileri kullanarak aynı formatta bir analiz yap:
 
 Haber Başlığı: "${newsItem.title}"
 Kripto Varlık: ${cryptoAsset}
 
-Yanıtın SADECE "Yorum:" ve "Yatırım Yapılabilirlik skoru :" satırlarını içermelidir.
-`;
+Yanıtın SADECE "Yatırım Yapılabilirlik Skoru:" ve "Yorum:" satırlarını içermelidir.`;
 
     console.log(`[analyzeNewsWithOpenRouter] Örnekli Yeni Prompt oluşturuldu (${cryptoAsset} - ${newsTitleForLog.substring(0,30)}...): ${prompt}`);
     console.log(`[analyzeNewsWithOpenRouter] API Anahtarı (ilk 5 karakter): ${OPENROUTER_API_KEY ? OPENROUTER_API_KEY.substring(0,5) : "API ANAHTARI TANIMSIZ!"}`);
@@ -612,7 +613,7 @@ Yanıtın SADECE "Yorum:" ve "Yatırım Yapılabilirlik skoru :" satırlarını 
             "messages": [
                 { "role": "user", "content": prompt }
             ],
-            "max_tokens": 150,
+            "max_tokens": 200,
             "temperature": 0.2
         };
         console.log(`[analyzeNewsWithOpenRouter] İstek Body: ${JSON.stringify(requestBody)}`);
@@ -836,38 +837,41 @@ function formatAnalysisContent(content) {
     let yorumText = "Yorum: Bilgi bulunamadı.";
     let skorText = "Yatırım Yapılabilirlik Skoru: N/A";
 
-    // Yorumu ayrıştır (ilk satır veya "Yorum:" ile başlayan kısım)
-    const yorumMatch = content.match(/Yorum:\s*([\s\S]*?)( Yatırım Yapılabilirlik skoru :|$)/i); 
-    // [\s\S]*? non-greedy olarak her şeyi alır, Yatırım... skoruna kadar veya sonuna kadar.
-    if (yorumMatch && yorumMatch[1]) {
-        yorumText = `<strong>Yorum:</strong><br>${yorumMatch[1].trim().replace(/\n/g, '<br>')}`;
-    } else {
-        // Eğer "Yorum:" etiketi yoksa, metnin başını yorum olarak almayı deneyebiliriz, 
-        // ama skor etiketi varsa ondan öncesini alırız.
-        const skorBaslangici = content.toLowerCase().indexOf("yatırım yapılabilirlik skoru :");
-        if (skorBaslangici !== -1) {
-            yorumText = `<strong>Yorum:</strong><br>${content.substring(0, skorBaslangici).trim().replace(/\n/g, '<br>')}`;
-        } else {
-            // Sadece genel metin varsa onu yorum olarak göster
-            yorumText = `<strong>Yorum:</strong><br>${content.trim().replace(/\n/g, '<br>')}`;
-        }
-    }
-
-    // Yatırım Yapılabilirlik Skorunu ayrıştır
-    const skorMatch = content.match(/Yatırım Yapılabilirlik skoru :\s*(\d+)/i);
+    // Yatırım Yapılabilirlik Skorunu ayrıştır (önce skor gelecek şekilde güncellendi)
+    const skorMatch = content.match(/Yatırım Yapılabilirlik Skoru\s*:\s*(\d+)/i);
     if (skorMatch && skorMatch[1]) {
         const score = parseInt(skorMatch[1], 10);
         let color = '#ffaa33'; // Medium (Nötr)
         if (score < 4) color = '#ff4d4d'; // Low (Olumsuz) - 0-3
         else if (score > 6) color = '#33cc33'; // High (Olumlu) - 7-10
-        // 4-6 nötr kalır
-        skorText = `<strong>Yatırım Yapılabilirlik Skoru:</strong> <span style="color:${color}; font-weight:bold;">${score.toFixed(0)}</span>`; // Tam sayı istendiği için toFixed(0)
+        skorText = `<strong>Yatırım Yapılabilirlik Skoru:</strong> <span style="color:${color}; font-weight:bold;">${score.toFixed(0)}</span>`;
+    }
+
+    // Yorumu ayrıştır (skordan sonra veya tek başına)
+    const yorumMatch = content.match(/Yorum\s*:\s*([\s\S]*)/i); 
+    if (yorumMatch && yorumMatch[1]) {
+        // Eğer skor da bulunmuşsa, yorum metni skordan sonraki kısım olmalı.
+        // Skor bulunamamışsa, tüm metin yorum olabilir.
+        let rawYorum = yorumMatch[1].trim();
+        // Eğer skor metni yorumun başındaysa (istenmeyen durum ama olabilir), onu temizle
+        if (skorMatch && rawYorum.toLowerCase().startsWith(skorMatch[0].toLowerCase())) {
+            rawYorum = rawYorum.substring(skorMatch[0].length).trim();
+        }
+        yorumText = `<strong>Yorum:</strong><br>${rawYorum.replace(/\n/g, '<br>')}`;
+    } else if (!skorMatch) { // Ne skor ne de "Yorum:" etiketi varsa, tüm içeriği yorum olarak al
+        yorumText = `<strong>Yorum:</strong><br>${content.trim().replace(/\n/g, '<br>')}`;
+    }
+
+    // Çıktı sırası: Önce skor, sonra yorum (eğer her ikisi de varsa veya sadece biri varsa ona göre düzenlenir)
+    if (skorMatch && yorumMatch) {
+        return `${skorText}<br><br>${yorumText}`;
+    } else if (skorMatch) {
+        return skorText;
+    } else if (yorumMatch || content.trim().length > 0) { // Sadece yorum varsa veya etiket yoksa bile içerik varsa
+        return yorumText;
     }
     
-    // Eğer yorumText zaten skoru içeriyorsa, tekrar eklememek için kontrol edilebilir, ama regex'ler ayrıştırmalı.
-    // Genellikle ayrı paragraflar halinde gelmesi beklenir şablondan dolayı.
-
-    return `${yorumText}<br><br>${skorText}`;
+    return "<p>Analiz içeriği ayrıştırılamadı.</p>"; // Eğer hiçbir şey bulunamazsa
 }
 
 // Toplu analiz bölümünü güncelle
@@ -920,7 +924,7 @@ function updateInvestmentScores() {
         if (!['BTC', 'ETH', 'BNB'].includes(category)) return;
 
         // formatAnalysisContent içindeki regex ile tutarlı olmalı
-        const scoreRegex = /Yatırım Yapılabilirlik skoru :\s*(\d+)/i; // Sadece tam sayı bekliyoruz (ondalık kısmı kaldırdım: (\.\d+)?) 
+        const scoreRegex = /Yatırım Yapılabilirlik Skoru\s*:\s*(\d+)/i; // Güncellenmiş Regex
         const scoreMatch = data.analysisText.match(scoreRegex);
 
         if (scoreMatch && scoreMatch[1]) {
